@@ -51,6 +51,30 @@ class SubtitleSettings(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    // ═══════════════════════════════════════════════════════════
+    // مفتاح Groq (مشفر عبر Android Keystore)
+    // ═══════════════════════════════════════════════════════════
+    private val groqKeyStore = GroqApiKeyStore(context.applicationContext)
+
+    var groqApiKey: String
+        get() = try { groqKeyStore.read() } catch (e: Exception) { "" }
+        set(value) {
+            if (value.isBlank()) {
+                groqKeyStore.clear()
+            } else {
+                groqKeyStore.save(value)
+            }
+        }
+
+    fun clearGroqApiKey() {
+        groqKeyStore.clear()
+    }
+
+    fun hasGroqApiKey(): Boolean {
+        return try { groqKeyStore.read().isNotBlank() } catch (e: Exception) { false }
+    }
+
+
     var textSizeIndex: Int
         get() = prefs.getInt(KEY_TEXT_SIZE, 2)
         set(v) = prefs.edit().putInt(KEY_TEXT_SIZE, v).apply()

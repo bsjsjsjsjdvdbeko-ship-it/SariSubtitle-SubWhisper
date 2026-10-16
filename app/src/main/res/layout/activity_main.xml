@@ -41,6 +41,15 @@
         android:text="إنشاء SRT من رابط الفيديو" />
 
     <Button
+        android:id="@+id/transcribeAudioButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp"
+        android:layout_marginBottom="2dp"
+        android:text="تفريغ صوت من ملف باستخدام Groq Whisper" />
+
+    <Button
         android:id="@+id/translateSrtButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

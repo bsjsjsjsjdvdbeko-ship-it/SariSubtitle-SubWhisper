@@ -31,6 +31,65 @@ object SettingsDialog {
         // عنوان
         root.addView(makeTitle(context, "⚙️ إعدادات الترجمة"))
 
+
+        // ═══════════════════════════════════════════════════════════
+        // مفتاح Groq API
+        // ═══════════════════════════════════════════════════════════
+        root.addView(makeLabel(context, "مفتاح Groq API"))
+
+        val groqApiKeyStatus = TextView(context).apply {
+            textSize = 12f
+            setTextColor(Color.DKGRAY)
+            text = if (settings.hasGroqApiKey()) "الحالة: محفوظ ✓" else "الحالة: غير محفوظ ✗"
+        }
+        root.addView(groqApiKeyStatus)
+
+        val groqApiKeyInput = android.widget.EditText(context).apply {
+            hint = "أدخل مفتاح Groq الجديد (اختياري)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        root.addView(groqApiKeyInput)
+
+        root.addView(TextView(context).apply {
+            text = "اتركه فارغاً للإبقاء على المفتاح الحالي."
+            textSize = 11f
+            setTextColor(Color.GRAY)
+        })
+
+        // زر إظهار المفتاح مؤقتاً
+        val showKeyBtn = Button(context).apply {
+            text = "إظهار المفتاح المدخل"
+            setOnClickListener {
+                if (groqApiKeyInput.inputType ==
+                    (android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD)) {
+                    groqApiKeyInput.inputType = android.text.InputType.TYPE_CLASS_TEXT
+                } else {
+                    groqApiKeyInput.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                }
+            }
+        }
+        root.addView(showKeyBtn)
+
+        // زر حذف المفتاح
+        root.addView(Button(context).apply {
+            text = "حذف مفتاح Groq المحفوظ"
+            setOnClickListener {
+                android.app.AlertDialog.Builder(context)
+                    .setTitle("حذف المفتاح")
+                    .setMessage("هل تريد حذف مفتاح Groq المحفوظ؟")
+                    .setNegativeButton("إلغاء", null)
+                    .setPositiveButton("حذف") { _, _ ->
+                        settings.clearGroqApiKey()
+                        groqApiKeyStatus.text = "الحالة: غير محفوظ ✗"
+                        android.widget.Toast.makeText(context, "تم الحذف", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    .show()
+            }
+        })
+
         // محرك المعالجة: الخيار يُحفظ محلياً، والمحرك الداخلي لا يستخدم SubWhisper.
         root.addView(makeLabel(context, "محرك المعالجة"))
         root.addView(TextView(context).apply {

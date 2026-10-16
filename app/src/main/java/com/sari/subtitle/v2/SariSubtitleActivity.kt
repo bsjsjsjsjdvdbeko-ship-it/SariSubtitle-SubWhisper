@@ -24,6 +24,7 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import org.json.JSONObject
+import java.io.IOException
 
 /**
  * Sari Subtitle — المرحلة 3.3
@@ -34,6 +35,8 @@ import org.json.JSONObject
 class SariSubtitleActivity : AppCompatActivity() {
 
     companion object {
+        private const val REQ_PICK_AUDIO = 1004
+        private const val REQ_SAVE_WHISPER_SRT = 1005
         private const val REQ_PICK_SRT = 1001
         private const val REQ_PICK_SRT_TO_TRANSLATE = 1002
         private const val REQ_TRANSLATE_SRT_PICK = 1002
@@ -47,6 +50,7 @@ class SariSubtitleActivity : AppCompatActivity() {
     private lateinit var subtitleOverlay: SubtitleOverlay
 
     private lateinit var settings: SubtitleSettings
+    private var pendingWhisperSrt: String? = null
     private lateinit var storage: SrtStorage
 
     private val handler = Handler(Looper.getMainLooper())
@@ -109,6 +113,11 @@ class SariSubtitleActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.generateSrtFromLinkButton).setOnClickListener {
             openSrtGenerator()
+        }
+
+
+        findViewById<Button>(R.id.transcribeAudioButton).setOnClickListener {
+            openAudioPicker()
         }
 
         findViewById<Button>(R.id.translateSrtButton).setOnClickListener {
@@ -448,6 +457,86 @@ class SariSubtitleActivity : AppCompatActivity() {
         }.start()
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // Groq Whisper — تفريغ صوت
+    // ═══════════════════════════════════════════════════════════
+
+    private fun openAudioPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "audio/*"
+        }
+        try {
+            startActivityForResult(intent, REQ_PICK_AUDIO)
+        } catch (e: Exception) {
+            Toast.makeText(this, "تعذر فتح مدير الملفات", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun transcribeAudioFile(uri: Uri) {
+        val labels = arrayOf("العربية (ar)", "الإنجليزية (en)")
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("لغة الصوت")
+            .setItems(labels) { _, selected ->
+                val lang = if (selected == 0) "ar" else "en"
+                runGroqTranscription(uri, lang)
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun runGroqTranscription(uri: Uri, language: String) {
+        if (settings.groqApiKey.isBlank()) {
+            Toast.makeText(this, "أدخل مفتاح Groq من الإعدادات أولاً", Toast.LENGTH_LONG).show()
+            return
+        }
+        statusText.text = "جارٍ إرسال الملف إلى Groq Whisper…"
+        Thread {
+            try {
+                val service = GroqWhisperService(
+                    context = applicationContext,
+                    apiKeyProvider = { settings.groqApiKey }
+                )
+                val result = service.transcribe(uri, language)
+                runOnUiThread {
+                    pendingWhisperSrt = result.srt
+                    statusText.text = "نجح التفريغ: ${result.segmentCount} مقطع، اللغة: ${result.language}"
+                    Toast.makeText(this, "اكتمل التفريغ بنجاح", Toast.LENGTH_LONG).show()
+                    val saveIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "application/x-subrip"
+                        putExtra(Intent.EXTRA_TITLE, "transcription.srt")
+                    }
+                    startActivityForResult(saveIntent, REQ_SAVE_WHISPER_SRT)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    val msg = e.message ?: "خطأ غير معروف"
+                    statusText.text = "فشل التفريغ: $msg"
+                    Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun saveWhisperSrt(uri: Uri) {
+        val srt = pendingWhisperSrt
+        if (srt.isNullOrBlank()) {
+            Toast.makeText(this, "لا يوجد SRT لحفظه", Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            contentResolver.openOutputStream(uri)?.use {
+                it.write(srt.toByteArray(Charsets.UTF_8))
+            } ?: throw java.io.IOException("تعذر فتح ملف الحفظ")
+            pendingWhisperSrt = null
+            statusText.text = "تم حفظ SRT"
+            Toast.makeText(this, "تم حفظ transcription.srt", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "تعذر الحفظ: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode != Activity.RESULT_OK) return
@@ -457,6 +546,8 @@ class SariSubtitleActivity : AppCompatActivity() {
             REQ_PICK_SRT_TO_TRANSLATE -> processTranslateSrt(uri)
             REQ_TRANSLATE_SRT_PICK -> translateSelectedSrt(uri)
             REQ_SAVE_TRANSLATED_SRT -> saveTranslatedSrt(uri)
+            REQ_PICK_AUDIO -> transcribeAudioFile(uri)
+            REQ_SAVE_WHISPER_SRT -> saveWhisperSrt(uri)
         }
     }
 
