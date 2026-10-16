@@ -225,9 +225,7 @@ class SariSubtitleActivity : AppCompatActivity() {
             clipboard.setPrimaryClip(ClipData.newPlainText("Video URL", videoUrl))
             androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("إنشاء ملف SRT عربي")
-                .setMessage("نُسخ رابط الفيديو. سيفتح مولّد خارجي قد يدعم هذا الرابط. داخل الموقع: الصق الرابط، اختر الترجمة إلى العربية إن كان الخيار متاحاً، أنشئ الترجمة ونزّل ملف SRT. ثم ارجع إلى Sari Subtitle واضغط زر SRT لاستيراده.
-
-الخدمة الخارجية لها حدود مجانية وقد لا تدعم بعض الروابط الخاصة أو المحمية؛ لا يتم إنشاء SRT داخل التطبيق نفسه.")
+                .setMessage("نُسخ رابط الفيديو. سيفتح مولّد خارجي قد يدعم هذا الرابط. داخل الموقع: الصق الرابط، اختر الترجمة إلى العربية إن كان الخيار متاحاً، أنشئ الترجمة ونزّل ملف SRT. ثم ارجع إلى Sari Subtitle واضغط زر SRT لاستيراده.\n\nالخدمة الخارجية لها حدود مجانية وقد لا تدعم بعض الروابط الخاصة أو المحمية؛ لا يتم إنشاء SRT داخل التطبيق نفسه.")
                 .setNegativeButton("إلغاء", null)
                 .setPositiveButton("فتح مولّد SRT") { _, _ ->
                     try {
