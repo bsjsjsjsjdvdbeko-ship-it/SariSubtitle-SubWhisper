@@ -2,6 +2,7 @@ package com.sari.subtitle.v2
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.ProgressDialog
 import android.content.Intent
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -15,8 +16,11 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
-import android.widget.EditText
+import android.widget.ArrayAdapter
+import android.widget.LinearLayout
+import android.widget.Spinner
 import android.widget.TextView
+import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import org.json.JSONObject
@@ -31,6 +35,8 @@ class SariSubtitleActivity : AppCompatActivity() {
 
     companion object {
         private const val REQ_PICK_SRT = 1001
+        private const val REQ_TRANSLATE_SRT_PICK = 1002
+        private const val REQ_SAVE_TRANSLATED_SRT = 1003
         private const val OFFSET_STEP_MS = 500L
     }
 
@@ -52,6 +58,9 @@ class SariSubtitleActivity : AppCompatActivity() {
 
     /** URL الذي تم تحميل SRT من أجله */
     private var lastSrtUrl: String? = null
+    private var pendingSourceLang = "en"
+    private var pendingTargetLang = "ar"
+    private var pendingTranslatedSrt: String? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,6 +108,10 @@ class SariSubtitleActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.generateSrtFromLinkButton).setOnClickListener {
             openSrtGenerator()
+        }
+
+        findViewById<Button>(R.id.translateSrtButton).setOnClickListener {
+            showSrtTranslationDialog()
         }
 
         findViewById<Button>(R.id.reloadXButton).setOnClickListener {
@@ -207,10 +220,7 @@ class SariSubtitleActivity : AppCompatActivity() {
         pollCurrentTimeOnce()
     }
 
-    /**
-     * يبدأ إنشاء SRT عبر خدمة ويب خارجية. لا نزعم أن الخدمة مدمجة داخل التطبيق:
-     * المستخدم ينشئ الملف في الموقع ثم يرجع ويستورده من زر SRT.
-     */
+    /** يبدأ إنشاء SRT حسب محرك المعالجة المختار في الإعدادات. */
     private fun openSrtGenerator() {
         val videoUrl = (urlInput.text.toString().trim().ifBlank { webView.url ?: "" }).trim()
         val uri = try { Uri.parse(videoUrl) } catch (_: Exception) { null }
@@ -220,14 +230,23 @@ class SariSubtitleActivity : AppCompatActivity() {
             return
         }
 
+        if (settings.processingEngine == SubtitleSettings.ENGINE_INTERNAL) {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("محرك Sari Subtitle الداخلي")
+                .setMessage("تم اختيار المحرك الداخلي. إنشاء SRT من رابط الفيديو لم يُنفّذ بعد: لا يوجد حالياً خادم استخراج صوت وتفريغ كلام مهيأ لهذا المسار. لن نفتح SubWhisper تلقائياً ولن ندّعي نجاح العملية. يمكنك حالياً استخدام زر «ترجمة ملف SRT» لترجمة ملف موجود.")
+                .setPositiveButton("حسنًا", null)
+                .show()
+            return
+        }
+
         try {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("Video URL", videoUrl))
             androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("إنشاء ملف SRT عربي")
-                .setMessage("نُسخ رابط الفيديو. سيفتح مولّد خارجي قد يدعم هذا الرابط. داخل الموقع: الصق الرابط، اختر الترجمة إلى العربية إن كان الخيار متاحاً، أنشئ الترجمة ونزّل ملف SRT. ثم ارجع إلى Sari Subtitle واضغط زر SRT لاستيراده.\n\nالخدمة الخارجية لها حدود مجانية وقد لا تدعم بعض الروابط الخاصة أو المحمية؛ لا يتم إنشاء SRT داخل التطبيق نفسه.")
+                .setTitle("إنشاء SRT عبر SubWhisper")
+                .setMessage("نُسخ رابط الفيديو. سيفتح الموقع الخارجي؛ الصق الرابط هناك، واختر اللغة المستهدفة، ثم نزّل SRT وارجع إلى التطبيق لاستيراده. قد لا تدعم الخدمة بعض الروابط أو قد تفرض حدوداً مجانية. هذا المسار خارجي وليس محركاً مدمجاً.")
                 .setNegativeButton("إلغاء", null)
-                .setPositiveButton("فتح مولّد SRT") { _, _ ->
+                .setPositiveButton("فتح SubWhisper") { _, _ ->
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://sub.kuandre.com/")))
                     } catch (e: Exception) {
@@ -237,6 +256,111 @@ class SariSubtitleActivity : AppCompatActivity() {
                 .show()
         } catch (e: Exception) {
             Toast.makeText(this, "تعذّر تجهيز الرابط: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private data class LanguageOption(val code: String, val label: String) {
+        override fun toString(): String = label
+    }
+
+    private fun showSrtTranslationDialog() {
+        val languages = listOf(
+            LanguageOption("ar", "العربية"), LanguageOption("en", "الإنجليزية"),
+            LanguageOption("es", "الإسبانية"), LanguageOption("fr", "الفرنسية"),
+            LanguageOption("de", "الألمانية"), LanguageOption("tr", "التركية"),
+            LanguageOption("ru", "الروسية"), LanguageOption("it", "الإيطالية"),
+            LanguageOption("pt", "البرتغالية"), LanguageOption("zh-CN", "الصينية"),
+            LanguageOption("ja", "اليابانية"), LanguageOption("ko", "الكورية"),
+            LanguageOption("fa", "الفارسية"), LanguageOption("ur", "الأوردية"),
+            LanguageOption("hi", "الهندية")
+        )
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 20, 40, 10)
+        }
+        root.addView(TextView(this).apply { text = "لغة الملف الأصلية" })
+        val sourceSpinner = Spinner(this)
+        sourceSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, languages)
+        sourceSpinner.setSelection(languages.indexOfFirst { it.code == "en" })
+        root.addView(sourceSpinner)
+        root.addView(TextView(this).apply { text = "ترجمة الملف إلى"; setPadding(0, 18, 0, 0) })
+        val targetSpinner = Spinner(this)
+        targetSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, languages)
+        targetSpinner.setSelection(languages.indexOfFirst { it.code == "ar" })
+        root.addView(targetSpinner)
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("ترجمة ملف SRT")
+            .setMessage("سيتم إرسال نص المقاطع إلى خدمة ترجمة عبر الإنترنت. أرقام المقاطع وتوقيتاتها تبقى كما هي. هذه الخدمة ليست SubWhisper، لكنها تتطلب الإنترنت وقد تفرض حدود استخدام.")
+            .setView(root)
+            .setNegativeButton("إلغاء", null)
+            .setPositiveButton("اختيار ملف SRT") { _, _ ->
+                pendingSourceLang = (sourceSpinner.selectedItem as LanguageOption).code
+                pendingTargetLang = (targetSpinner.selectedItem as LanguageOption).code
+                val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "*/*"
+                }
+                startActivityForResult(Intent.createChooser(intent, "اختر ملف SRT لترجمته"), REQ_TRANSLATE_SRT_PICK)
+            }
+            .show()
+    }
+
+    private fun translateSelectedSrt(uri: Uri) {
+        val raw = try {
+            contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+        } catch (e: Exception) { null }
+        if (raw.isNullOrBlank()) {
+            Toast.makeText(this, "تعذّر قراءة ملف SRT", Toast.LENGTH_LONG).show()
+            return
+        }
+        val progress = ProgressDialog(this).apply {
+            setTitle("ترجمة ملف SRT")
+            setMessage("جارٍ بدء الترجمة…")
+            setProgressStyle(ProgressDialog.STYLE_SPINNER)
+            setCancelable(false)
+            show()
+        }
+        Thread {
+            try {
+                val translated = SrtTranslationService.translateSrt(raw, pendingSourceLang, pendingTargetLang) { done, total ->
+                    runOnUiThread { progress.setMessage("جارٍ ترجمة المقاطع: $done / $total") }
+                }
+                pendingTranslatedSrt = translated
+                runOnUiThread {
+                    progress.dismiss()
+                    val create = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "application/x-subrip"
+                        putExtra(Intent.EXTRA_TITLE, "translated_${pendingTargetLang}.srt")
+                    }
+                    startActivityForResult(create, REQ_SAVE_TRANSLATED_SRT)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    progress.dismiss()
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("تعذرت الترجمة")
+                        .setMessage("${e.message ?: "خطأ غير معروف"}\n\nتحقق من الإنترنت ورمز اللغة وحدود الخدمة المجانية، ثم حاول مرة أخرى.")
+                        .setPositiveButton("حسنًا", null)
+                        .show()
+                }
+            }
+        }.start()
+    }
+
+    private fun saveTranslatedSrt(uri: Uri) {
+        val translated = pendingTranslatedSrt ?: run {
+            Toast.makeText(this, "لا يوجد ملف مترجم للحفظ", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            contentResolver.openOutputStream(uri)?.use { it.write(translated.toByteArray(Charsets.UTF_8)) }
+                ?: throw IllegalStateException("تعذّر فتح الملف للحفظ")
+            pendingTranslatedSrt = null
+            Toast.makeText(this, "تم حفظ ملف SRT المترجم مع الحفاظ على التوقيتات", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "فشل حفظ الملف: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -257,8 +381,12 @@ class SariSubtitleActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_PICK_SRT && resultCode == Activity.RESULT_OK) {
-            data?.data?.let { loadSrtFromUri(it) }
+        if (resultCode != Activity.RESULT_OK) return
+        val uri = data?.data ?: return
+        when (requestCode) {
+            REQ_PICK_SRT -> loadSrtFromUri(uri)
+            REQ_TRANSLATE_SRT_PICK -> translateSelectedSrt(uri)
+            REQ_SAVE_TRANSLATED_SRT -> saveTranslatedSrt(uri)
         }
     }
 

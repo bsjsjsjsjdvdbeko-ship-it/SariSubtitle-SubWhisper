@@ -17,9 +17,13 @@ class SubtitleSettings(context: Context) {
         private const val KEY_BG_COLOR = "bg_color"
         private const val KEY_BOLD = "bold"
         private const val KEY_OFFSET = "offset_ms"
+        private const val KEY_PROCESSING_ENGINE = "processing_engine"
 
         val TEXT_SIZES = floatArrayOf(14f, 18f, 22f, 28f, 34f)
         val TEXT_SIZE_LABELS = arrayOf("صغير", "متوسط", "كبير", "كبير جداً", "ضخم")
+
+        const val ENGINE_INTERNAL = "internal"
+        const val ENGINE_SUBWHISPER = "subwhisper"
 
         const val POS_BOTTOM = 0
         const val POS_CENTER = 1
@@ -66,6 +70,14 @@ class SubtitleSettings(context: Context) {
     var bold: Boolean
         get() = prefs.getBoolean(KEY_BOLD, true)
         set(v) = prefs.edit().putBoolean(KEY_BOLD, v).apply()
+
+    /** محرك المعالجة المختار: internal أو subwhisper. */
+    var processingEngine: String
+        get() = prefs.getString(KEY_PROCESSING_ENGINE, ENGINE_INTERNAL) ?: ENGINE_INTERNAL
+        set(v) = prefs.edit().putString(
+            KEY_PROCESSING_ENGINE,
+            if (v == ENGINE_SUBWHISPER) ENGINE_SUBWHISPER else ENGINE_INTERNAL
+        ).apply()
 
     /** إزاحة SRT بالمللي ثانية */
     var offsetMs: Long

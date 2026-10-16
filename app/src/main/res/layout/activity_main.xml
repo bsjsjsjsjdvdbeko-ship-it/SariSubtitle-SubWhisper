@@ -38,7 +38,16 @@
         android:layout_marginStart="4dp"
         android:layout_marginEnd="4dp"
         android:layout_marginBottom="2dp"
-        android:text="إنشاء SRT عربي من رابط" />
+        android:text="إنشاء SRT من رابط الفيديو" />
+
+    <Button
+        android:id="@+id/translateSrtButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp"
+        android:layout_marginBottom="2dp"
+        android:text="ترجمة ملف SRT إلى لغة أخرى" />
 
     <!-- الصف 1: الأزرار الأساسية -->
     <LinearLayout

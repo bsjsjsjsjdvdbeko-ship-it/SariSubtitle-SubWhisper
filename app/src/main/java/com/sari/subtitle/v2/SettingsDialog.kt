@@ -31,6 +31,31 @@ object SettingsDialog {
         // عنوان
         root.addView(makeTitle(context, "⚙️ إعدادات الترجمة"))
 
+        // محرك المعالجة: الخيار يُحفظ محلياً، والمحرك الداخلي لا يستخدم SubWhisper.
+        root.addView(makeLabel(context, "محرك المعالجة"))
+        root.addView(TextView(context).apply {
+            text = "هذا الاختيار يحدد مسار إنشاء SRT من الروابط. ترجمة ملف SRT تُدار من داخل التطبيق حالياً عبر خدمة ترجمة إنترنت منفصلة، وليست معالجة محلية بالكامل."
+            textSize = 12f
+            setTextColor(Color.DKGRAY)
+        })
+        val engineRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        val engineButtons = mutableListOf<Button>()
+        val engineLabels = listOf("داخلي Sari Subtitle", "SubWhisper الخارجي")
+        engineLabels.forEachIndexed { i, label ->
+            val btn = Button(context).apply {
+                text = label
+                textSize = 10f
+                setOnClickListener {
+                    settings.processingEngine = if (i == 0) SubtitleSettings.ENGINE_INTERNAL else SubtitleSettings.ENGINE_SUBWHISPER
+                    updateSizeButtons(engineButtons, i)
+                }
+            }
+            engineRow.addView(btn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            engineButtons.add(btn)
+        }
+        root.addView(engineRow)
+        updateSizeButtons(engineButtons, if (settings.processingEngine == SubtitleSettings.ENGINE_SUBWHISPER) 1 else 0)
+
         // حجم الخط
         root.addView(makeLabel(context, "حجم الخط"))
         val sizeRow = LinearLayout(context).apply {
