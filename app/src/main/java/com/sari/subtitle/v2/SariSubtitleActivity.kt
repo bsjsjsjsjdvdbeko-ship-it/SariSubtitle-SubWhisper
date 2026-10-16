@@ -35,6 +35,7 @@ class SariSubtitleActivity : AppCompatActivity() {
 
     companion object {
         private const val REQ_PICK_SRT = 1001
+        private const val REQ_PICK_SRT_TO_TRANSLATE = 1002
         private const val REQ_TRANSLATE_SRT_PICK = 1002
         private const val REQ_SAVE_TRANSLATED_SRT = 1003
         private const val OFFSET_STEP_MS = 500L
@@ -111,7 +112,15 @@ class SariSubtitleActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.translateSrtButton).setOnClickListener {
-            showSrtTranslationDialog()
+            // ترجمة تلقائية: يكتشف اللغة ويفتح picker مباشرة
+            val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*"
+            }
+            startActivityForResult(
+                Intent.createChooser(intent, "اختر ملف SRT للترجمة التلقائية"),
+                REQ_PICK_SRT_TO_TRANSLATE
+            )
         }
 
         findViewById<Button>(R.id.reloadXButton).setOnClickListener {
@@ -379,12 +388,73 @@ class SariSubtitleActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * ترجمة SRT تلقائية: يكتشف اللغة ثم يترجم إلى العربية.
+     * لا حوارات — المستخدم اختار الملف فقط.
+     */
+    private fun processTranslateSrt(uri: Uri) {
+        val raw = try {
+            contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+        } catch (e: Exception) { null }
+
+        if (raw.isNullOrBlank()) {
+            Toast.makeText(this, "تعذّر قراءة ملف SRT", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val progress = ProgressDialog(this).apply {
+            setTitle("ترجمة SRT تلقائياً")
+            setMessage("جارٍ اكتشاف اللغة…")
+            setProgressStyle(ProgressDialog.STYLE_SPINNER)
+            setCancelable(false)
+            show()
+        }
+
+        Thread {
+            try {
+                val translated = SrtTranslationService.translateAuto(
+                    source = raw,
+                    targetLang = "ar",
+                    onDetected = { lang ->
+                        runOnUiThread { progress.setMessage("🌐 اللغة المكتشفة: $lang\nجارٍ الترجمة…") }
+                    }
+                ) { done, total ->
+                    runOnUiThread { progress.setMessage("جارٍ ترجمة المقاطع: $done / $total") }
+                }
+
+                pendingTranslatedSrt = translated
+                pendingTargetLang = "ar"
+
+                runOnUiThread {
+                    progress.dismiss()
+                    Toast.makeText(this, "✅ تمت الترجمة — اختر مكان الحفظ", Toast.LENGTH_SHORT).show()
+                    val create = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "application/x-subrip"
+                        putExtra(Intent.EXTRA_TITLE, "translated_ar_${System.currentTimeMillis()}.srt")
+                    }
+                    startActivityForResult(create, REQ_SAVE_TRANSLATED_SRT)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    progress.dismiss()
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("تعذرت الترجمة")
+                        .setMessage("${e.message ?: "خطأ غير معروف"}\n\nتحقق من الإنترنت، ثم حاول مرة أخرى.")
+                        .setPositiveButton("حسنًا", null)
+                        .show()
+                }
+            }
+        }.start()
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode != Activity.RESULT_OK) return
         val uri = data?.data ?: return
         when (requestCode) {
             REQ_PICK_SRT -> loadSrtFromUri(uri)
+            REQ_PICK_SRT_TO_TRANSLATE -> processTranslateSrt(uri)
             REQ_TRANSLATE_SRT_PICK -> translateSelectedSrt(uri)
             REQ_SAVE_TRANSLATED_SRT -> saveTranslatedSrt(uri)
         }
