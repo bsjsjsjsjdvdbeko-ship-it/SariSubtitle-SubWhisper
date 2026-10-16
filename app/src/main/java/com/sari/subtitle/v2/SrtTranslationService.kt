@@ -14,7 +14,7 @@ import java.net.URLEncoder
  * ولا نضمن حصتها المجانية أو توفرها الدائم. لا يتم إرسال توقيتات SRT إلى الخدمة.
  */
 object SrtTranslationService {
-    private val timestampPattern = Regex("^.*\\d{2}:\\d{2}:\\d{2}[,.]\\d{3}\\s*-->.*$")
+    private val timestampPattern = Regex("\\d{2}:\\d{2}:\\d{2}[,.]\\d{3}\\s*-->")
 
     fun translateSrt(source: String, sourceLang: String, targetLang: String,
                      onProgress: (Int, Int) -> Unit = { _, _ -> }): String {
@@ -28,14 +28,14 @@ object SrtTranslationService {
         val output = ArrayList<String>(blocks.size)
         val translatable = blocks.count { block ->
             val lines = block.split('\n')
-            val ti = lines.indexOfFirst { timestampPattern.matches(it) }
+            val ti = lines.indexOfFirst { timestampPattern.containsMatchIn(it) }
             ti >= 0 && lines.drop(ti + 1).any { it.isNotBlank() }
         }
         var completed = 0
 
         for (block in blocks) {
             val lines = block.split('\n').toMutableList()
-            val timeIndex = lines.indexOfFirst { timestampPattern.matches(it) }
+            val timeIndex = lines.indexOfFirst { timestampPattern.containsMatchIn(it) }
             if (timeIndex < 0 || lines.drop(timeIndex + 1).all { it.isBlank() }) {
                 output.add(block)
                 continue
