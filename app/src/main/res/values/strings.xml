@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sari Subtitle</string>
+    <string name="hint_url">ألصق رابط X أو أي رابط</string>
+    <string name="btn_load">فتح</string>
+    <string name="btn_check_time">فحص الوقت</string>
+    <string name="btn_reload_x">X</string>
+    <string name="status_ready">جاهز — المرحلة 1</string>
+    <string name="status_loading">جارٍ التحميل…</string>
+</resources>

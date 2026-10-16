@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@android:color/black">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="4dp">
+
+        <EditText
+            android:id="@+id/urlInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="@string/hint_url"
+            android:inputType="textUri"
+            android:singleLine="true"
+            android:textColor="@android:color/white"
+            android:textColorHint="#888888"
+            android:text="https://x.com/" />
+
+        <Button
+            android:id="@+id/loadButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_load" />
+    </LinearLayout>
+
+    <!-- يبدأ خدمة خارجية لإنشاء SRT من رابط، ثم يستورد المستخدم الملف عبر زر SRT -->
+    <Button
+        android:id="@+id/generateSrtFromLinkButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp"
+        android:layout_marginBottom="2dp"
+        android:text="إنشاء SRT عربي من رابط" />
+
+    <!-- الصف 1: الأزرار الأساسية -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="4dp">
+
+        <Button
+            android:id="@+id/checkTimeButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="10sp"
+            android:text="@string/btn_check_time" />
+
+        <Button
+            android:id="@+id/loadSrtButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="10sp"
+            android:text="SRT" />
+
+        <Button
+            android:id="@+id/toggleOverlayButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="10sp"
+            android:text="ترجمة" />
+
+        <Button
+            android:id="@+id/settingsButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="10sp"
+            android:text="⚙️" />
+
+        <Button
+            android:id="@+id/reloadXButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="10sp"
+            android:text="@string/btn_reload_x" />
+    </LinearLayout>
+
+    <!-- الصف 2: أزرار المزامنة -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="4dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="مزامنة:"
+            android:textColor="#00FF88"
+            android:textSize="11sp"
+            android:paddingEnd="4dp"
+            android:paddingStart="4dp"
+            android:gravity="center_vertical" />
+
+        <Button
+            android:id="@+id/offsetMinusButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="12sp"
+            android:text="➖ 0.5s" />
+
+        <Button
+            android:id="@+id/offsetPlusButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="12sp"
+            android:text="➕ 0.5s" />
+
+        <Button
+            android:id="@+id/offsetResetButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="12sp"
+            android:text="تصفير" />
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="4dp"
+        android:fontFamily="monospace"
+        android:textSize="10sp"
+        android:textColor="#00FF88"
+        android:maxLines="6"
+        android:text="@string/status_ready" />
+
+    <FrameLayout
+        android:id="@+id/webContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <WebView
+            android:id="@+id/webView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <com.sari.subtitle.v2.SubtitleOverlay
+            android:id="@+id/subtitleOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+    </FrameLayout>
+
+</LinearLayout>
