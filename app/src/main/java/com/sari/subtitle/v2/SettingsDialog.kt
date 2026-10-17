@@ -242,8 +242,19 @@ object SettingsDialog {
         AlertDialog.Builder(context)
             .setView(scroll)
             .setPositiveButton("حفظ") { _, _ ->
-                overlay.applySettings(settings)
-                onSaved()
+                try {
+                    val newKey = groqApiKeyInput.text.toString().trim()
+                    if (newKey.isNotEmpty()) {
+                        settings.groqApiKey = newKey
+                        groqApiKeyStatus.text = "الحالة: محفوظ ✓"
+                        groqApiKeyStatus.setTextColor(android.graphics.Color.GREEN)
+                    }
+                    overlay.applySettings(settings)
+                    onSaved()
+                } catch (e: Exception) {
+                    groqApiKeyStatus.text = "خطأ: ${e.message}"
+                    groqApiKeyStatus.setTextColor(android.graphics.Color.RED)
+                }
             }
             .setNegativeButton("إلغاء", null)
             .show()
