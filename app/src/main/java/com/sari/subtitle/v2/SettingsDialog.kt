@@ -38,9 +38,12 @@ object SettingsDialog {
         root.addView(makeLabel(context, "مفتاح Groq API"))
 
         val groqApiKeyStatus = TextView(context).apply {
-            textSize = 12f
-            setTextColor(Color.DKGRAY)
-            text = if (settings.hasGroqApiKey()) "الحالة: محفوظ ✓" else "الحالة: غير محفوظ ✗"
+            textSize = 14f
+            val isSaved = settings.hasGroqApiKey()
+            text = if (isSaved) "الحالة: محفوظ ✓" else "الحالة: غير محفوظ ✗"
+            setTextColor(if (isSaved) Color.GREEN else Color.RED)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(0, 8, 0, 8)
         }
         root.addView(groqApiKeyStatus)
 
