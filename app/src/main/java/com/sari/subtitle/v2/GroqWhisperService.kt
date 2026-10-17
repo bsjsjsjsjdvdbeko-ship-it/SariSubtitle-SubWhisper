@@ -23,6 +23,7 @@ class GroqWhisperService(
         private const val MAX_UPLOAD_BYTES = 24L * 1024L * 1024L
         private const val CONNECT_TIMEOUT_MS = 30_000
         private const val READ_TIMEOUT_MS = 180_000
+        private const val WRITE_TIMEOUT_MS = 180_000
     }
 
     data class Result(val language: String, val text: String, val srt: String, val segmentCount: Int)
@@ -49,9 +50,45 @@ class GroqWhisperService(
         }
     }
 
-    private fun sendRequest(file: File, fileName: String, apiKey: String, language: String): Result {
+    private fun sendRequest(
+        file: File,
+        fileName: String,
+        apiKey: String,
+        language: String
+    ): Result {
         val boundary = "SariGroqBoundary${System.nanoTime()}"
-        val connection = URL(ENDPOINT).openConnection() as HttpURLConnection
+        
+        // ─── حساب حجم multipart مسبقاً ───
+        val textParts = listOf(
+            "model" to "whisper-large-v3",
+            "temperature" to "0",
+            "response_format" to "verbose_json",
+            "language" to language,
+            "timestamp_granularities[]" to "segment"
+        )
+        
+        var totalSize = 0L
+        for ((name, value) in textParts) {
+            totalSize += "--$boundary\r\n".toByteArray(Charsets.UTF_8).size
+            totalSize += "Content-Disposition: form-data; name=\"$name\"\r\n\r\n".toByteArray(Charsets.UTF_8).size
+            totalSize += value.toByteArray(Charsets.UTF_8).size
+            totalSize += "\r\n".toByteArray(Charsets.UTF_8).size
+        }
+        
+        val safeName = safeFileName(fileName)
+        val fileHeader = buildString {
+            append("--").append(boundary).append("\r\n")
+            append("Content-Disposition: form-data; name=\"file\"; filename=\"").append(safeName).append("\"\r\n")
+            append("Content-Type: application/octet-stream\r\n\r\n")
+        }.toByteArray(Charsets.UTF_8)
+        totalSize += fileHeader.size
+        totalSize += file.length()
+        totalSize += "\r\n".toByteArray(Charsets.UTF_8).size
+        totalSize += "--$boundary--\r\n".toByteArray(Charsets.UTF_8).size
+        
+        // ─── الاتصال ───
+        val connection = (URL(ENDPOINT).openConnection() as HttpURLConnection)
+        
         try {
             connection.requestMethod = "POST"
             connection.connectTimeout = CONNECT_TIMEOUT_MS
@@ -61,38 +98,53 @@ class GroqWhisperService(
             connection.setRequestProperty("Authorization", "Bearer $apiKey")
             connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
             connection.setRequestProperty("Accept", "application/json")
-
-            BufferedOutputStream(connection.outputStream).use { output ->
-                fun textPart(name: String, value: String) {
+            connection.setRequestProperty("Connection", "close")
+            
+            // ─── إجبار Content-Length ───
+            connection.setFixedLengthStreamingMode(totalSize)
+            
+            BufferedOutputStream(connection.outputStream, 8192).use { output ->
+                // text parts
+                for ((name, value) in textParts) {
                     output.write("--$boundary\r\n".toByteArray(Charsets.UTF_8))
                     output.write("Content-Disposition: form-data; name=\"$name\"\r\n\r\n".toByteArray(Charsets.UTF_8))
                     output.write(value.toByteArray(Charsets.UTF_8))
                     output.write("\r\n".toByteArray(Charsets.UTF_8))
                 }
-                textPart("model", "whisper-large-v3")
-                textPart("temperature", "0")
-                textPart("response_format", "verbose_json")
-                textPart("language", language)
-                textPart("timestamp_granularities[]", "segment")
-                output.write("--$boundary\r\n".toByteArray(Charsets.UTF_8))
-                output.write(("Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"\r\n").toByteArray(Charsets.UTF_8))
-                output.write("Content-Type: application/octet-stream\r\n\r\n".toByteArray(Charsets.UTF_8))
-                file.inputStream().buffered().use { it.copyTo(output) }
-                output.write("\r\n--$boundary--\r\n".toByteArray(Charsets.UTF_8))
+                
+                // file header
+                output.write(fileHeader)
+                
+                // file content
+                file.inputStream().buffered().use { input ->
+                    val buffer = ByteArray(8192)
+                    var read: Int
+                    while (input.read(buffer).also { read = it } > 0) {
+                        output.write(buffer, 0, read)
+                    }
+                }
+                
+                // footer
+                output.write("\r\n".toByteArray(Charsets.UTF_8))
+                output.write("--$boundary--\r\n".toByteArray(Charsets.UTF_8))
                 output.flush()
             }
-
-            val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) {
+            
+            val statusCode = connection.responseCode
+            val responseStream = if (statusCode in 200..299) connection.inputStream else connection.errorStream
+            
+            val responseBody = responseStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            
+            if (statusCode !in 200..299) {
                 val message = try {
-                    JSONObject(body).optJSONObject("error")?.optString("message")
-                        ?.takeIf { it.isNotBlank() } ?: body.take(500)
-                } catch (_: Exception) { body.take(500) }
-                throw IOException("فشل Groq (HTTP $code): $message")
+                    JSONObject(responseBody).optJSONObject("error")?.optString("message")?.takeIf { it.isNotBlank() } ?: responseBody.take(500)
+                } catch (_: Exception) {
+                    responseBody.take(500)
+                }
+                throw IOException("فشل Groq (HTTP $statusCode): $message")
             }
-            return parseResponse(body, language)
+            
+            return parseResponse(responseBody, language)
         } finally {
             connection.disconnect()
         }
