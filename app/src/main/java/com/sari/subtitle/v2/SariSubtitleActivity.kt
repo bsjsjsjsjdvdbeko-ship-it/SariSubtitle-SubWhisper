@@ -490,7 +490,39 @@ class SariSubtitleActivity : AppCompatActivity() {
             Toast.makeText(this, "أدخل مفتاح Groq من الإعدادات أولاً", Toast.LENGTH_LONG).show()
             return
         }
-        statusText.text = "جارٍ إرسال الملف إلى Groq Whisper…"
+
+        // إنشاء ProgressDialog مع مؤقت
+        val progress = android.app.ProgressDialog(this).apply {
+            setTitle("تفريغ الصوت (Groq Whisper)")
+            setMessage("جارٍ بدء الطلب…")
+            setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER)
+            setCancelable(false)
+            setButton(
+                android.content.DialogInterface.BUTTON_NEGATIVE,
+                "إلغاء"
+            ) { _, _ -> /* يمكن إلغاؤه لاحقاً */ }
+            show()
+        }
+
+        val startTime = System.currentTimeMillis()
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        var cancelled = false
+
+        // مؤقت يحدّث كل ثانية
+        val timer = object : Runnable {
+            override fun run() {
+                if (cancelled) return
+                val elapsed = ((System.currentTimeMillis() - startTime) / 1000).toInt()
+                val mins = elapsed / 60
+                val secs = elapsed % 60
+                progress.setMessage("جارٍ إرسال الملف إلى Groq…\nمضى: ${mins}:${String.format("%02d", secs)}")
+                handler.postDelayed(this, 1000)
+            }
+        }
+        handler.post(timer)
+
+        statusText.text = "⏳ جارٍ التفريغ… (${language})"
+
         Thread {
             try {
                 val service = GroqWhisperService(
@@ -498,10 +530,14 @@ class SariSubtitleActivity : AppCompatActivity() {
                     apiKeyProvider = { settings.groqApiKey }
                 )
                 val result = service.transcribe(uri, language)
+                val totalTime = ((System.currentTimeMillis() - startTime) / 1000).toInt()
+                cancelled = true
                 runOnUiThread {
+                    handler.removeCallbacks(timer)
+                    progress.dismiss()
                     pendingWhisperSrt = result.srt
-                    statusText.text = "نجح التفريغ: ${result.segmentCount} مقطع، اللغة: ${result.language}"
-                    Toast.makeText(this, "اكتمل التفريغ بنجاح", Toast.LENGTH_LONG).show()
+                    statusText.text = "✅ اكتمل التفريغ: ${result.segmentCount} مقطع (${totalTime}s)"
+                    Toast.makeText(this, "✅ اكتمل التفريغ بعد ${totalTime} ثانية", Toast.LENGTH_LONG).show()
                     val saveIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
                         type = "application/x-subrip"
@@ -510,10 +546,18 @@ class SariSubtitleActivity : AppCompatActivity() {
                     startActivityForResult(saveIntent, REQ_SAVE_WHISPER_SRT)
                 }
             } catch (e: Exception) {
+                cancelled = true
+                val totalTime = ((System.currentTimeMillis() - startTime) / 1000).toInt()
                 runOnUiThread {
+                    handler.removeCallbacks(timer)
+                    progress.dismiss()
                     val msg = e.message ?: "خطأ غير معروف"
-                    statusText.text = "فشل التفريغ: $msg"
-                    Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                    statusText.text = "❌ فشل التفريغ بعد ${totalTime}s: $msg"
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("فشل التفريغ")
+                        .setMessage("$msg\n\n(بعد ${totalTime} ثانية)")
+                        .setPositiveButton("حسناً", null)
+                        .show()
                 }
             }
         }.start()
