@@ -141,23 +141,64 @@ class SubWhisperInternalActivity : AppCompatActivity() {
     }
 
     private fun injectSrtDownloadHook() {
-        // حقن سكربت JavaScript يعترض تنزيلات blob: و data:
         val js = """
             (function() {
               if (window.__sariSrtHookInstalled) return;
               window.__sariSrtHookInstalled = true;
 
-              // 1. اعتراض window.open
+              // دالة مساعدة لإرسال النص إلى Kotlin
+              window.__sariSendSrt = function(text) {
+                if (window.SariSrtBridge) {
+                  var base64 = btoa(unescape(encodeURIComponent(text)));
+                  window.SariSrtBridge.receiveSrt('subtitles.srt', 'text/plain', base64);
+                }
+              };
+
+              // دالة لفحص ما إذا كان النص يشبه SRT
+              window.__sariLooksLikeSrt = function(text) {
+                return /\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/.test(text);
+              };
+
+              // 1. اعتراض fetch
+              var originalFetch = window.fetch;
+              window.fetch = function() {
+                return originalFetch.apply(this, arguments).then(function(response) {
+                  var clone = response.clone();
+                  clone.text().then(function(text) {
+                    if (text && window.__sariLooksLikeSrt(text)) {
+                      window.__sariSendSrt(text);
+                    }
+                  }).catch(function() {});
+                  return response;
+                });
+              };
+
+              // 2. اعتراض XMLHttpRequest
+              var originalXhrOpen = XMLHttpRequest.prototype.open;
+              XMLHttpRequest.prototype.open = function(method, url) {
+                this.addEventListener('load', function() {
+                  try {
+                    if (this.responseText && window.__sariLooksLikeSrt(this.responseText)) {
+                      window.__sariSendSrt(this.responseText);
+                    }
+                  } catch(e) {}
+                });
+                return originalXhrOpen.apply(this, arguments);
+              };
+
+              // 3. اعتراض window.open
               var originalOpen = window.open;
-              window.open = function(url, name, features) {
+              window.open = function(url) {
                 if (url && (url.startsWith('blob:') || url.startsWith('data:'))) {
-                  window.__sariReceiveBlobUrl(url);
+                  fetch(url).then(r => r.text()).then(text => {
+                    if (window.__sariLooksLikeSrt(text)) window.__sariSendSrt(text);
+                  });
                   return null;
                 }
                 return originalOpen.apply(this, arguments);
               };
 
-              // 2. اعتراض النقر على روابط التنزيل
+              // 4. اعتراض النقر على روابط التنزيل
               document.addEventListener('click', function(e) {
                 var target = e.target.closest('a');
                 if (!target) return;
@@ -165,11 +206,13 @@ class SubWhisperInternalActivity : AppCompatActivity() {
                 if (href && (href.startsWith('blob:') || href.startsWith('data:'))) {
                   e.preventDefault();
                   e.stopPropagation();
-                  window.__sariReceiveBlobUrl(href);
+                  fetch(href).then(r => r.text()).then(text => {
+                    if (window.__sariLooksLikeSrt(text)) window.__sariSendSrt(text);
+                  });
                 }
               }, true);
 
-              // 3. اعتراض التنزيلات التي تنشئها الصفحة عبر إنشاء روابط
+              // 5. اعتراض createElement('a')
               var originalCreateElement = document.createElement;
               document.createElement = function(tag) {
                 var el = originalCreateElement.call(document, tag);
@@ -177,41 +220,15 @@ class SubWhisperInternalActivity : AppCompatActivity() {
                   var originalClick = el.click;
                   el.click = function() {
                     if (this.href && (this.href.startsWith('blob:') || this.href.startsWith('data:'))) {
-                      window.__sariReceiveBlobUrl(this.href);
+                      fetch(this.href).then(r => r.text()).then(text => {
+                        if (window.__sariLooksLikeSrt(text)) window.__sariSendSrt(text);
+                      });
                       return;
                     }
                     return originalClick.apply(this, arguments);
                   };
                 }
                 return el;
-              };
-
-              // 4. دالة استقبال الـ blob وتحويله إلى base64 وإرساله لـ Kotlin
-              window.__sariReceiveBlobUrl = function(url) {
-                try {
-                  fetch(url)
-                    .then(function(response) { return response.blob(); })
-                    .then(function(blob) {
-                      var reader = new FileReader();
-                      reader.onload = function() {
-                        var base64 = reader.result.split(',')[1];
-                        if (window.SariSrtBridge) {
-                          // استخدام الاسم الصحيح للجسر
-                          window.SariSrtBridge.receiveSrt('subtitles.srt', 'text/plain', base64);
-                        }
-                      };
-                      reader.readAsDataURL(blob);
-                    })
-                    .catch(function(err) {
-                      if (window.SariSrtBridge) {
-                        window.SariSrtBridge.onError('fetch failed: ' + err);
-                      }
-                    });
-                } catch(err) {
-                  if (window.SariSrtBridge) {
-                    window.SariSrtBridge.onError('exception: ' + err);
-                  }
-                }
               };
             })();
         """.trimIndent()
