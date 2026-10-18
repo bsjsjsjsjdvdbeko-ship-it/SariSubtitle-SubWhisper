@@ -122,6 +122,10 @@ class SariSubtitleActivity : AppCompatActivity() {
             openAudioPicker()
         }
 
+        findViewById<Button>(R.id.transcribeXAutoButton).setOnClickListener {
+            transcribeXAuto()
+        }
+
         findViewById<Button>(R.id.pasteLinkTranscribeButton).setOnClickListener {
             openPasteLinkFlow()
         }
@@ -614,6 +618,221 @@ class SariSubtitleActivity : AppCompatActivity() {
                     .show()
             }
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // تفريغ X تلقائياً: captureStream + MediaRecorder + Groq
+    // ═══════════════════════════════════════════════════════════
+    
+    private fun transcribeXAuto() {
+        Toast.makeText(this, "🔍 جارٍ فحص الفيديو…", Toast.LENGTH_SHORT).show()
+        statusText.text = "🔍 فحص الفيديو…"
+        
+        val js = """
+            (function() {
+              try {
+                var v = document.querySelector('video');
+                if (!v) return JSON.stringify({error: "no_video"});
+                return JSON.stringify({
+                  hasVideo: true,
+                  duration: v.duration || 0,
+                  paused: v.paused,
+                  canCapture: typeof v.captureStream === 'function',
+                  canRecord: typeof MediaRecorder !== 'undefined'
+                });
+              } catch(e) {
+                return JSON.stringify({error: String(e)});
+              }
+            })();
+        """.trimIndent()
+        
+        webView.evaluateJavascript(js) { raw ->
+            val decoded = try {
+                org.json.JSONTokener(raw ?: "null").nextValue().toString()
+            } catch (_: Exception) { "null" }
+            runOnUiThread {
+                try {
+                    val obj = org.json.JSONObject(decoded)
+                    if (obj.has("error")) {
+                        Toast.makeText(this, "❌ لا يوجد فيديو", Toast.LENGTH_LONG).show()
+                        return@runOnUiThread
+                    }
+                    val canCapture = obj.optBoolean("canCapture", false)
+                    val canRecord = obj.optBoolean("canRecord", false)
+                    val duration = obj.optDouble("duration", 0.0)
+                    if (!canCapture || !canRecord) {
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle("غير مدعوم")
+                            .setMessage("WebView لا يدعم captureStream أو MediaRecorder.")
+                            .setPositiveButton("حسناً", null)
+                            .show()
+                        return@runOnUiThread
+                    }
+                    // ابدأ التسجيل
+                    startXRecording(duration)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "خطأ: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+    
+    private fun startXRecording(duration: Double) {
+        val recordDurationMs = (minOf(duration * 1000.0, 120000.0)).toInt()  // 2 دقيقة كحد أقصى
+        val progress = android.app.ProgressDialog(this).apply {
+            setTitle("🎙️ تسجيل الصوت من الفيديو")
+            setMessage("جارٍ التسجيل…")
+            setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER)
+            setCancelable(false)
+            show()
+        }
+        
+        val startTime = System.currentTimeMillis()
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val timer = object : Runnable {
+            override fun run() {
+                val elapsed = (System.currentTimeMillis() - startTime) / 1000
+                val remaining = (recordDurationMs / 1000) - elapsed
+                progress.setMessage("🎙️ جارٍ التسجيل…\nمضى: ${elapsed}s\nالمتبقي: ${remaining}s")
+                handler.postDelayed(this, 1000)
+            }
+        }
+        handler.post(timer)
+        
+        val js = """
+            (async function() {
+              try {
+                var v = document.querySelector('video');
+                if (!v) return JSON.stringify({error: "no_video"});
+                if (v.paused) await v.play();
+                await new Promise(r => setTimeout(r, 500));
+                
+                var stream = v.captureStream();
+                var audioTracks = stream.getAudioTracks();
+                if (audioTracks.length === 0) return JSON.stringify({error: "no_audio"});
+                
+                var audioStream = new MediaStream(audioTracks);
+                var recorder = new MediaRecorder(audioStream, {
+                  mimeType: 'audio/webm;codecs=opus',
+                  audioBitsPerSecond: 128000
+                });
+                
+                var chunks = [];
+                recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+                
+                return new Promise((resolve) => {
+                  recorder.onstop = async () => {
+                    var blob = new Blob(chunks, { type: 'audio/webm' });
+                    var reader = new FileReader();
+                    reader.onload = () => resolve(JSON.stringify({
+                      audio: reader.result.split(',')[1],
+                      size: blob.size
+                    }));
+                    reader.readAsDataURL(blob);
+                  };
+                  recorder.start();
+                  setTimeout(() => recorder.stop(), ${recordDurationMs});
+                });
+              } catch(e) {
+                return JSON.stringify({error: String(e)});
+              }
+            })();
+        """.trimIndent()
+        
+        webView.evaluateJavascript(js) { raw ->
+            handler.removeCallbacks(timer)
+            progress.dismiss()
+            
+            val decoded = try {
+                org.json.JSONTokener(raw ?: "null").nextValue().toString()
+            } catch (_: Exception) { raw ?: "null" }
+            
+            runOnUiThread {
+                try {
+                    val obj = org.json.JSONObject(decoded)
+                    if (obj.has("error")) {
+                        Toast.makeText(this, "❌ ${obj.getString("error")}", Toast.LENGTH_LONG).show()
+                        return@runOnUiThread
+                    }
+                    val b64 = obj.getString("audio")
+                    val sizeKB = obj.optInt("size", 0) / 1024
+                    statusText.text = "✅ تم تسجيل $sizeKB KB — جارٍ إرسال إلى Groq…"
+                    val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                    sendToGroq(bytes)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "خطأ: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+    
+    private fun sendToGroq(audioBytes: ByteArray) {
+        if (settings.groqApiKey.isBlank()) {
+            Toast.makeText(this, "أدخل مفتاح Groq من الإعدادات أولاً", Toast.LENGTH_LONG).show()
+            return
+        }
+        
+        val progress = android.app.ProgressDialog(this).apply {
+            setTitle("🌐 Groq Whisper")
+            setMessage("جارٍ التفريغ…")
+            setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER)
+            setCancelable(false)
+            show()
+        }
+        
+        val startTime = System.currentTimeMillis()
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val timer = object : Runnable {
+            override fun run() {
+                val elapsed = (System.currentTimeMillis() - startTime) / 1000
+                progress.setMessage("🌐 جارٍ التفريغ…\nمضى: ${elapsed}s")
+                handler.postDelayed(this, 1000)
+            }
+        }
+        handler.post(timer)
+        
+        Thread {
+            try {
+                val tempFile = java.io.File(cacheDir, "x_audio_${System.currentTimeMillis()}.webm")
+                tempFile.writeBytes(audioBytes)
+                
+                val service = GroqWhisperService(
+                    context = applicationContext,
+                    apiKeyProvider = { settings.groqApiKey }
+                )
+                
+                val result = service.transcribe(
+                    android.net.Uri.fromFile(tempFile),
+                    "auto"
+                )
+                
+                tempFile.delete()
+                
+                handler.removeCallbacks(timer)
+                runOnUiThread {
+                    progress.dismiss()
+                    try {
+                        val cues = SrtParser.parse(result.srt.byteInputStream())
+                        if (cues.isEmpty()) {
+                            Toast.makeText(this, "لم يتم استخراج مقاطع", Toast.LENGTH_LONG).show()
+                            return@runOnUiThread
+                        }
+                        repo.setCues(cues)
+                        overlayOn = true
+                        statusText.text = "✅ SRT جاهز: ${cues.size} مقطع"
+                        Toast.makeText(this, "✅ تم التفريغ: ${cues.size} مقطع SRT", Toast.LENGTH_LONG).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "خطأ في SRT: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                handler.removeCallbacks(timer)
+                runOnUiThread {
+                    progress.dismiss()
+                    Toast.makeText(this, "❌ فشل التفريغ: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
 
 private fun openAudioPicker() {

@@ -50,6 +50,22 @@
         android:text="تحميل صوت من ملف" />
 
     <Button
+        android:id="@+id/transcribeXAutoButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp"
+        android:layout_marginBottom="2dp"
+        android:text="🎙️ تفريغ X تلقائياً (تسجيل + Groq + SRT)" />
+
+    <Button
+        android:id="@+id/recordButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:text="تسجيل" />
+
+    <Button
         android:id="@+id/pasteLinkTranscribeButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
