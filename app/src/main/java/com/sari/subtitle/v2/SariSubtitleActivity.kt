@@ -23,6 +23,7 @@ import android.widget.TextView
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.webkit.WebViewFeature
 import org.json.JSONObject
 import java.io.IOException
 
@@ -551,6 +552,15 @@ class SariSubtitleActivity : AppCompatActivity() {
     // ═══════════════════════════════════════════════════════════
 
         private fun testCaptureStream() {
+        // فحص دعم WebViewFeature
+        val supportsArrayBuffer = WebViewFeature.isFeatureSupported(
+            WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER
+        )
+        val supportsWebMessageListener = WebViewFeature.isFeatureSupported(
+            WebViewFeature.WEB_MESSAGE_LISTENER
+        )
+        android.util.Log.d("SariTest", "ArrayBuffer: $supportsArrayBuffer, Listener: $supportsWebMessageListener")
+        
         val js = """
             (function() {
               try {
