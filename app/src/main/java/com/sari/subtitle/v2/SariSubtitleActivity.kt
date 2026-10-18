@@ -664,7 +664,14 @@ class SariSubtitleActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode != Activity.RESULT_OK) return
         if (requestCode == REQ_SUBWHISPER_INTERNAL) {
-            val srtText = data?.getStringExtra(SubWhisperInternalActivity.EXTRA_SRT_TEXT)
+            var srtText = data?.getStringExtra(SubWhisperInternalActivity.EXTRA_SRT_TEXT)
+            // إذا لم يصل، اقرأ من SrtStorage (احتياطي)
+            if (srtText.isNullOrBlank()) {
+                srtText = try {
+                    storage.load("subwhisper-latest")
+                } catch (e: Exception) { null }
+                android.util.Log.d("SariSrt", "read from storage: ${srtText?.length ?: 0} chars")
+            }
             if (srtText.isNullOrBlank()) {
                 Toast.makeText(this, "لم يصل ملف SRT من صفحة SubWhisper", Toast.LENGTH_LONG).show()
                 return
