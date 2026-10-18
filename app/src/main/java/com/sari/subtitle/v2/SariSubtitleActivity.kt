@@ -596,10 +596,13 @@ class SariSubtitleActivity : AppCompatActivity() {
 
     /** Extracts an existing public YouTube caption track without downloading the video. */
     private fun promptYouTubeCaptionExtraction(videoUrl: String) {
-        val labels = arrayOf("أفضل مسار متاح تلقائياً", "العربية", "الإنجليزية")
+        val labels = arrayOf(
+            "أفضل مسار متاح تلقائياً",
+            "العربية",
+            "الإنجليزية"
+        )
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("إنشاء SRT من ترجمة YouTube المتاحة")
-            .setMessage("سيحاول التطبيق جلب الترجمة/التفريغ النصي الذي يكشفه YouTube علناً، دون تنزيل الفيديو أو الصوت. قد تكون الترجمة تلقائية أو بلغة الفيديو، ولا تعمل هذه الطريقة مع الفيديوهات الخاصة أو التي لا تعرض مسارات ترجمة. إذا لم تتوفر ترجمة، يمكنك تجربة مسار ملف الوسائط المباشر أو استيراد SRT موجود.")
+            .setTitle("إنشاء SRT من ترجمة YouTube")
             .setItems(labels) { _, selected ->
                 val language = when (selected) { 1 -> "ar"; 2 -> "en"; else -> "auto" }
                 fetchYouTubeCaptions(videoUrl, language)
