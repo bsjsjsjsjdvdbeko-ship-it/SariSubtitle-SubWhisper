@@ -161,7 +161,7 @@ class SariSubtitleActivity : AppCompatActivity() {
             // ترجمة تلقائية: يكتشف اللغة ويفتح picker مباشرة
             val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
-                type = "*/*"
+                setType("*/*")
             }
             startActivityForResult(
                 Intent.createChooser(intent, "اختر ملف SRT للترجمة التلقائية"),
@@ -417,12 +417,12 @@ class SariSubtitleActivity : AppCompatActivity() {
                         .setMessage("تم استخراج ${result.segmentCount} مقطعاً. احفظ الملف لاستخدامه لاحقاً.")
                         .setNegativeButton("إغلاق", null)
                         .setPositiveButton("حفظ SRT") { _, _ ->
-                            val saveIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                            val saveIntent1 = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
-                                type = "application/x-subrip"
+                                setType("application/x-subrip")
                                 putExtra(Intent.EXTRA_TITLE, "transcription.srt")
                             }
-                            startActivityForResult(saveIntent, REQ_SAVE_WHISPER_SRT)
+                            startActivityForResult(saveIntent1, REQ_SAVE_WHISPER_SRT)
                         }
                         .show()
                 }
@@ -637,12 +637,12 @@ class SariSubtitleActivity : AppCompatActivity() {
                         .setMessage("تم جلب ${result.cueCount} مقطعاً باللغة ${result.languageCode}. نوع المسار: $generated. حُفظت نسخة داخل التطبيق لإعادة استخدامها. إذا أردت ترجمتها للعربية، استخدم زر ترجمة ملف SRT.")
                         .setNegativeButton("إغلاق", null)
                         .setPositiveButton("حفظ SRT") { _, _ ->
-                            val saveIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                            val saveIntent2 = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
-                                type = "application/x-subrip"
+                                setType("application/x-subrip")
                                 putExtra(Intent.EXTRA_TITLE, "youtube-captions-${YouTubeCaptionExtractor.getVideoId(videoUrl)}.srt")
                             }
-                            startActivityForResult(saveIntent, REQ_SAVE_WHISPER_SRT)
+                            startActivityForResult(saveIntent2, REQ_SAVE_WHISPER_SRT)
                         }
                         .show()
                 }
@@ -761,7 +761,7 @@ class SariSubtitleActivity : AppCompatActivity() {
                 pendingTargetLang = (targetSpinner.selectedItem as LanguageOption).code
                 val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "*/*"
+                    setType("*/*")
                 }
                 startActivityForResult(Intent.createChooser(intent, "اختر ملف SRT لترجمته"), REQ_TRANSLATE_SRT_PICK)
             }
@@ -793,7 +793,7 @@ class SariSubtitleActivity : AppCompatActivity() {
                     progress.dismiss()
                     val create = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "application/x-subrip"
+                        setType("application/x-subrip")
                         putExtra(Intent.EXTRA_TITLE, "translated_${pendingTargetLang}.srt")
                     }
                     startActivityForResult(create, REQ_SAVE_TRANSLATED_SRT)
@@ -829,7 +829,7 @@ class SariSubtitleActivity : AppCompatActivity() {
     private fun openSrtPicker() {
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            type = "*/*"
+            setType("*/*")
         }
         try {
             startActivityForResult(
@@ -884,7 +884,7 @@ class SariSubtitleActivity : AppCompatActivity() {
                     Toast.makeText(this, "✅ تمت الترجمة — اختر مكان الحفظ", Toast.LENGTH_SHORT).show()
                     val create = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "application/x-subrip"
+                        setType("application/x-subrip")
                         putExtra(Intent.EXTRA_TITLE, "translated_ar_${System.currentTimeMillis()}.srt")
                     }
                     startActivityForResult(create, REQ_SAVE_TRANSLATED_SRT)
@@ -1219,7 +1219,7 @@ private data class SelectedTranscriptionResult(val language: String, val text: S
     private fun openAudioPicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            type = "audio/*"
+            setType("audio/*")
         }
         try {
             startActivityForResult(intent, REQ_PICK_AUDIO)
@@ -1289,12 +1289,12 @@ private data class SelectedTranscriptionResult(val language: String, val text: S
                     pendingWhisperSrt = result.srt
                     statusText.text = "✅ اكتمل التفريغ: ${result.segmentCount} مقطع (${totalTime}s)"
                     Toast.makeText(this, "✅ اكتمل التفريغ بعد ${totalTime} ثانية", Toast.LENGTH_LONG).show()
-                    val saveIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    val saveIntent3 = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "application/x-subrip"
+                        setType("application/x-subrip")
                         putExtra(Intent.EXTRA_TITLE, "transcription.srt")
                     }
-                    startActivityForResult(saveIntent, REQ_SAVE_WHISPER_SRT)
+                    startActivityForResult(saveIntent3, REQ_SAVE_WHISPER_SRT)
                 }
             } catch (e: Exception) {
                 cancelled = true
