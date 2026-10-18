@@ -1,15 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="@android:color/black">
 
+    <!-- WebView كامل (95% من الشاشة) -->
+    <WebView
+        android:id="@+id/webView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@+id/bottomBar"
+        android:layout_below="@+id/topBar" />
+
+    <!-- SubtitleOverlay فوق WebView -->
+    <FrameLayout
+        android:id="@+id/webContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@+id/bottomBar"
+        android:layout_below="@+id/topBar">
+
+        <com.sari.subtitle.v2.SubtitleOverlay
+            android:id="@+id/subtitleOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+    </FrameLayout>
+
+    <!-- الشريط العلوي (رفيع) -->
     <LinearLayout
+        android:id="@+id/topBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
         android:orientation="horizontal"
-        android:padding="4dp">
+        android:padding="4dp"
+        android:background="#1A1A1A">
 
         <EditText
             android:id="@+id/urlInput"
@@ -19,6 +45,7 @@
             android:hint="@string/hint_url"
             android:inputType="textUri"
             android:singleLine="true"
+            android:textSize="12sp"
             android:textColor="@android:color/white"
             android:textColorHint="#888888"
             android:text="https://x.com/" />
@@ -27,222 +54,103 @@
             android:id="@+id/loadButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/btn_load" />
+            android:textSize="11sp"
+            android:text="فتح" />
+
+        <Button
+            android:id="@+id/settingsButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:text="⚙️" />
+
     </LinearLayout>
 
-    <!-- يبدأ خدمة خارجية لإنشاء SRT من رابط، ثم يستورد المستخدم الملف عبر زر SRT -->
-    <Button
-        android:id="@+id/generateSrtFromLinkButton"
+    <!-- شريط الحالة (شفاف) -->
+    <TextView
+        android:id="@+id/statusText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="4dp"
-        android:layout_marginEnd="4dp"
-        android:layout_marginBottom="2dp"
-        android:text="إنشاء SRT من رابط الفيديو" />
+        android:layout_above="@+id/bottomBar"
+        android:padding="6dp"
+        android:fontFamily="monospace"
+        android:textSize="10sp"
+        android:textColor="#00FF88"
+        android:maxLines="3"
+        android:background="#80000000"
+        android:visibility="gone"
+        android:text="@string/status_ready" />
 
-    <Button
-        android:id="@+id/analyzeLinkButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="4dp"
-        android:layout_marginEnd="4dp"
-        android:layout_marginBottom="2dp"
-        android:text="فحص الرابط وتحديد أفضل طريقة لإنشاء SRT" />
-
-    <Button
-        android:id="@+id/transcribeDirectMediaUrlButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="4dp"
-        android:layout_marginEnd="4dp"
-        android:layout_marginBottom="2dp"
-        android:text="رابط مباشر للصوت/الفيديو ← إنشاء SRT" />
-
-    <Button
-        android:id="@+id/importSrtFromUrlButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="4dp"
-        android:layout_marginEnd="4dp"
-        android:layout_marginBottom="2dp"
-        android:text="استيراد ملف SRT من رابط مباشر" />
-
-    <Button
-        android:id="@+id/transcribeAudioButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="4dp"
-        android:layout_marginEnd="4dp"
-        android:layout_marginBottom="2dp"
-        android:text="تحميل صوت من ملف" />
-
-    <Button
-        android:id="@+id/transcribeXAutoButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="4dp"
-        android:layout_marginEnd="4dp"
-        android:layout_marginBottom="2dp"
-        android:text="🎙️ تفريغ صوت الفيديو الحالي (المنصات المدعومة)" />
-
-    <Button
-        android:id="@+id/pasteLinkTranscribeButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="4dp"
-        android:layout_marginEnd="4dp"
-        android:layout_marginBottom="2dp"
-        android:text="الصق الرابط فقط → تفريغ داخل التطبيق" />
-
-    <Button
-        android:id="@+id/copyLinkOnlyButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="4dp"
-        android:layout_marginEnd="4dp"
-        android:layout_marginBottom="2dp"
-        android:text="نسخ الرابط فقط — دون فتح تطبيق خارجي" />
-
-    <Button
-        android:id="@+id/translateSrtButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="4dp"
-        android:layout_marginEnd="4dp"
-        android:layout_marginBottom="2dp"
-        android:text="ترجمة ملف SRT إلى لغة أخرى" />
-
-    <!-- الصف 1: الأزرار الأساسية -->
+    <!-- الشريط السفلي (4 أزرار فقط) -->
     <LinearLayout
+        android:id="@+id/bottomBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
         android:orientation="horizontal"
-        android:padding="4dp">
+        android:padding="4dp"
+        android:background="#1A1A1A">
 
         <Button
-            android:id="@+id/checkTimeButton"
+            android:id="@+id/menuButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textSize="10sp"
-            android:text="@string/btn_check_time" />
-
-        <Button
-            android:id="@+id/testCaptureButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="اختبار"
-            android:textSize="10sp" />
-
-        <Button
-            android:id="@+id/recordButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="تسجيل"
-            android:textSize="10sp" />
-
-        <Button
-            android:id="@+id/loadSrtButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textSize="10sp"
-            android:text="SRT" />
+            android:textSize="18sp"
+            android:text="☰" />
 
         <Button
             android:id="@+id/toggleOverlayButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textSize="10sp"
+            android:textSize="11sp"
             android:text="ترجمة" />
 
         <Button
-            android:id="@+id/settingsButton"
+            android:id="@+id/loadSrtButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textSize="10sp"
-            android:text="⚙️" />
+            android:textSize="11sp"
+            android:text="SRT" />
+
+        <Button
+            android:id="@+id/checkTimeButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="11sp"
+            android:text="⏱" />
 
         <Button
             android:id="@+id/reloadXButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="10sp"
-            android:text="@string/btn_reload_x" />
-    </LinearLayout>
-
-    <!-- الصف 2: أزرار المزامنة -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="4dp">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="مزامنة:"
-            android:textColor="#00FF88"
             android:textSize="11sp"
-            android:paddingEnd="4dp"
-            android:paddingStart="4dp"
-            android:gravity="center_vertical" />
-
-        <Button
-            android:id="@+id/offsetMinusButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textSize="12sp"
-            android:text="➖ 0.5s" />
-
-        <Button
-            android:id="@+id/offsetPlusButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textSize="12sp"
-            android:text="➕ 0.5s" />
-
-        <Button
-            android:id="@+id/offsetResetButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textSize="12sp"
-            android:text="تصفير" />
+            android:text="X" />
 
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/statusText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:padding="4dp"
-        android:fontFamily="monospace"
-        android:textSize="10sp"
-        android:textColor="#00FF88"
-        android:maxLines="6"
-        android:text="@string/status_ready" />
-
-    <FrameLayout
-        android:id="@+id/webContainer"
-        android:layout_width="match_parent"
+    <!-- أزرار مخفية للاستخدام القديم (مخفية) -->
+    <LinearLayout
+        android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:visibility="gone">
 
-        <WebView
-            android:id="@+id/webView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+        <Button android:id="@+id/transcribeXAutoButton" android:layout_width="1dp" android:layout_height="1dp" />
+        <Button android:id="@+id/transcribeAudioButton" android:layout_width="1dp" android:layout_height="1dp" />
+        <Button android:id="@+id/transcribeDirectMediaUrlButton" android:layout_width="1dp" android:layout_height="1dp" />
+        <Button android:id="@+id/importSrtFromUrlButton" android:layout_width="1dp" android:layout_height="1dp" />
+        <Button android:id="@+id/analyzeLinkButton" android:layout_width="1dp" android:layout_height="1dp" />
+        <Button android:id="@+id/generateSrtFromLinkButton" android:layout_width="1dp" android:layout_height="1dp" />
+        <Button android:id="@+id/pasteLinkTranscribeButton" android:layout_width="1dp" android:layout_height="1dp" />
+        <Button android:id="@+id/copyLinkOnlyButton" android:layout_width="1dp" android:layout_height="1dp" />
+        <Button android:id="@+id/translateSrtButton" android:layout_width="1dp" android:layout_height="1dp" />
+        <Button android:id="@+id/offsetMinusButton" android:layout_width="1dp" android:layout_height="1dp" />
+        <Button android:id="@+id/offsetPlusButton" android:layout_width="1dp" android:layout_height="1dp" />
+        <Button android:id="@+id/offsetResetButton" android:layout_width="1dp" android:layout_height="1dp" />
 
-        <com.sari.subtitle.v2.SubtitleOverlay
-            android:id="@+id/subtitleOverlay"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+    </LinearLayout>
 
-    </FrameLayout>
-
-</LinearLayout>
+</RelativeLayout>

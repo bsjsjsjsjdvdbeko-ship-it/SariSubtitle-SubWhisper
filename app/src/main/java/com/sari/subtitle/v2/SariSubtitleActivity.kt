@@ -23,6 +23,7 @@ import android.widget.TextView
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import androidx.webkit.WebViewFeature
 import org.json.JSONObject
 import java.io.IOException
@@ -176,6 +177,10 @@ class SariSubtitleActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.checkTimeButton).setOnClickListener {
             pollCurrentTimeOnce()
+        }
+
+        findViewById<Button>(R.id.menuButton).setOnClickListener {
+            showBottomSheet()
         }
 
         findViewById<Button>(R.id.testCaptureButton).setOnClickListener {
@@ -1219,7 +1224,82 @@ private data class SelectedTranscriptionResult(val language: String, val text: S
         }
     }
 
-    private fun openAudioPicker() {
+        private fun showBottomSheet() {
+        val sheet = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.bottom_sheet_menu, null)
+        sheet.setContentView(view)
+
+        // ربط كل زر داخل Bottom Sheet
+        view.findViewById<Button>(R.id.bsGenerateSrtButton)?.setOnClickListener {
+            sheet.dismiss()
+            findViewById<Button>(R.id.generateSrtFromLinkButton)?.performClick()
+        }
+
+        view.findViewById<Button>(R.id.bsTranscribeXButton)?.setOnClickListener {
+            sheet.dismiss()
+            findViewById<Button>(R.id.transcribeXAutoButton)?.performClick()
+        }
+
+        view.findViewById<Button>(R.id.bsTranscribeAudioButton)?.setOnClickListener {
+            sheet.dismiss()
+            findViewById<Button>(R.id.transcribeAudioButton)?.performClick()
+        }
+
+        view.findViewById<Button>(R.id.bsDirectMediaButton)?.setOnClickListener {
+            sheet.dismiss()
+            findViewById<Button>(R.id.transcribeDirectMediaUrlButton)?.performClick()
+        }
+
+        view.findViewById<Button>(R.id.bsImportSrtButton)?.setOnClickListener {
+            sheet.dismiss()
+            findViewById<Button>(R.id.importSrtFromUrlButton)?.performClick()
+        }
+
+        view.findViewById<Button>(R.id.bsAnalyzeLinkButton)?.setOnClickListener {
+            sheet.dismiss()
+            findViewById<Button>(R.id.analyzeLinkButton)?.performClick()
+        }
+
+        view.findViewById<Button>(R.id.bsPasteSubWhisperButton)?.setOnClickListener {
+            sheet.dismiss()
+            findViewById<Button>(R.id.pasteLinkTranscribeButton)?.performClick()
+        }
+
+        view.findViewById<Button>(R.id.bsCopyLinkButton)?.setOnClickListener {
+            sheet.dismiss()
+            findViewById<Button>(R.id.copyLinkOnlyButton)?.performClick()
+        }
+
+        view.findViewById<Button>(R.id.bsTranslateSrtButton)?.setOnClickListener {
+            sheet.dismiss()
+            findViewById<Button>(R.id.translateSrtButton)?.performClick()
+        }
+
+        view.findViewById<Button>(R.id.bsOffsetMinus)?.setOnClickListener {
+            sheet.dismiss()
+            findViewById<Button>(R.id.offsetMinusButton)?.performClick()
+        }
+
+        view.findViewById<Button>(R.id.bsOffsetPlus)?.setOnClickListener {
+            sheet.dismiss()
+            findViewById<Button>(R.id.offsetPlusButton)?.performClick()
+        }
+
+        view.findViewById<Button>(R.id.bsOffsetReset)?.setOnClickListener {
+            sheet.dismiss()
+            findViewById<Button>(R.id.offsetResetButton)?.performClick()
+        }
+
+        sheet.show()
+    }
+
+    private fun showStatus(text: String) {
+        statusText.text = text
+        statusText.visibility = android.view.View.VISIBLE
+        // إخفاء تلقائي بعد 3 ثوان (اختياري)
+    }
+
+private fun openAudioPicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             setType("audio/*")

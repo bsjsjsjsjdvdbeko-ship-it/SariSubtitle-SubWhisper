@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="القائمة"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/white"
+            android:gravity="center"
+            android:padding="8dp" />
+
+        <Button
+            android:id="@+id/bsGenerateSrtButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🎬 إنشاء SRT من رابط فيديو" />
+
+        <Button
+            android:id="@+id/bsTranscribeXButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🎙️ تفريغ صوت الفيديو الحالي" />
+
+        <Button
+            android:id="@+id/bsTranscribeAudioButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🎙️ تحميل صوت من ملف" />
+
+        <Button
+            android:id="@+id/bsDirectMediaButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🌐 رابط مباشر للصوت/الفيديو" />
+
+        <Button
+            android:id="@+id/bsImportSrtButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📥 استيراد SRT من رابط مباشر" />
+
+        <Button
+            android:id="@+id/bsAnalyzeLinkButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🔍 فحص الرابط" />
+
+        <Button
+            android:id="@+id/bsPasteSubWhisperButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🌐 SubWhisper (الصق الرابط)" />
+
+        <Button
+            android:id="@+id/bsCopyLinkButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📋 نسخ الرابط فقط" />
+
+        <Button
+            android:id="@+id/bsTranslateSrtButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🌐 ترجمة ملف SRT" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#333333"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="مزامنة التوقيت"
+            android:textSize="13sp"
+            android:textColor="#AAAAAA"
+            android:padding="4dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/bsOffsetMinus"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="➖ 0.5s" />
+
+            <Button
+                android:id="@+id/bsOffsetPlus"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="➕ 0.5s" />
+
+            <Button
+                android:id="@+id/bsOffsetReset"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="تصفير" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>
