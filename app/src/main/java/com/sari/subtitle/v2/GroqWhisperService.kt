@@ -32,8 +32,12 @@ class GroqWhisperService(
     fun transcribe(audioUri: Uri, language: String): Result {
         val apiKey = apiKeyProvider().trim()
         require(apiKey.isNotEmpty()) { "أدخل مفتاح Groq من الإعدادات أولاً." }
+        // "auto" means let Whisper detect the spoken language. In that case
+        // omit the optional API language field instead of sending "auto" as a code.
         val lang = language.trim().lowercase(Locale.ROOT)
-        require(lang == "ar" || lang == "en") { "اللغة المدعومة حالياً ar أو en." }
+        require(lang == "ar" || lang == "en" || lang == "auto" || lang.isBlank()) {
+            "اختر العربية أو الإنجليزية أو اكتشاف اللغة تلقائياً."
+        }
         val originalName = getDisplayName(audioUri).ifBlank { "audio.wav" }
         val suffix = originalName.substringAfterLast('.', "wav").lowercase(Locale.ROOT)
             .takeIf { it.matches(Regex("[a-z0-9]{1,8}")) } ?: "wav"
@@ -59,13 +63,17 @@ class GroqWhisperService(
         val boundary = "SariGroqBoundary${System.nanoTime()}"
         
         // ─── حساب حجم multipart مسبقاً ───
-        val textParts = listOf(
+        val textParts = mutableListOf(
             "model" to "whisper-large-v3",
             "temperature" to "0",
             "response_format" to "verbose_json",
-            "language" to language,
             "timestamp_granularities[]" to "segment"
         )
+        // Groq/Whisper expects a language code such as "en" or "ar"; "auto"
+        // is not a valid language code. Omit it so the model detects language.
+        if (language.equals("ar", ignoreCase = true) || language.equals("en", ignoreCase = true)) {
+            textParts.add(3, "language" to language.lowercase(Locale.ROOT))
+        }
         
         var totalSize = 0L
         for ((name, value) in textParts) {
@@ -199,8 +207,8 @@ class GroqWhisperService(
                 val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (index >= 0) cursor.getString(index).orEmpty() else ""
             } else ""
-        }.orEmpty()
-    } catch (_: Exception) { "" }
+        }.orEmpty().ifBlank { uri.lastPathSegment.orEmpty() }
+    } catch (_: Exception) { uri.lastPathSegment.orEmpty() }
 
     private fun safeFileName(name: String): String = name
         .replace("\\", "_").replace("/", "_").replace("\"", "_")

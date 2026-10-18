@@ -93,6 +93,77 @@ object SettingsDialog {
             }
         })
 
+        // مزود تحويل الصوت إلى نص (STT)
+        root.addView(makeLabel(context, "مزود تحويل الصوت إلى نص (STT)"))
+        val providerNames = arrayOf("Groq Whisper", "Deepgram Nova-3", "OpenAI Whisper")
+        val providerSpinner = android.widget.Spinner(context).apply {
+            adapter = android.widget.ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, providerNames)
+            setSelection(when (settings.sttProvider) { SubtitleSettings.STT_DEEPGRAM -> 1; SubtitleSettings.STT_OPENAI -> 2; else -> 0 })
+        }
+        root.addView(providerSpinner)
+        root.addView(TextView(context).apply {
+            text = "يمكنك الاختيار بين Groq وDeepgram وOpenAI. لكل مزود مفتاح وحدود/تكلفة مستقلة؛ OpenAI Whisper ليس مجانياً عادةً."
+            textSize = 12f; setTextColor(Color.DKGRAY); setPadding(0, 6, 0, 6)
+        })
+
+        root.addView(makeLabel(context, "مفتاح Deepgram API"))
+        val deepgramStatus = TextView(context).apply {
+            text = if (settings.hasDeepgramApiKey()) "الحالة: محفوظ ✓" else "الحالة: غير محفوظ ✗"
+            textSize = 13f; setTextColor(if (settings.hasDeepgramApiKey()) Color.GREEN else Color.RED)
+        }
+        root.addView(deepgramStatus)
+        val deepgramKeyInput = android.widget.EditText(context).apply {
+            hint = "أدخل مفتاح Deepgram (اختياري)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        root.addView(deepgramKeyInput)
+        root.addView(TextView(context).apply {
+            text = "اترك الحقل فارغاً للاحتفاظ بالمفتاح المحفوظ. المفاتيح تحفظ مشفرة عبر Android Keystore."
+            textSize = 11f; setTextColor(Color.GRAY)
+        })
+        root.addView(Button(context).apply {
+            text = "حذف مفتاح Deepgram المحفوظ"
+            setOnClickListener {
+                AlertDialog.Builder(context).setTitle("حذف المفتاح")
+                    .setMessage("هل تريد حذف مفتاح Deepgram المحفوظ؟")
+                    .setNegativeButton("إلغاء", null)
+                    .setPositiveButton("حذف") { _, _ ->
+                        settings.clearDeepgramApiKey()
+                        deepgramStatus.text = "الحالة: غير محفوظ ✗"; deepgramStatus.setTextColor(Color.RED)
+                    }.show()
+            }
+        })
+
+        root.addView(makeLabel(context, "مفتاح OpenAI API"))
+        val openAiStatus = TextView(context).apply {
+            text = if (settings.hasOpenAiApiKey()) "الحالة: محفوظ ✓" else "الحالة: غير محفوظ ✗"
+            textSize = 13f; setTextColor(if (settings.hasOpenAiApiKey()) Color.GREEN else Color.RED)
+        }
+        root.addView(openAiStatus)
+        val openAiKeyInput = android.widget.EditText(context).apply {
+            hint = "أدخل مفتاح OpenAI (اختياري)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        root.addView(openAiKeyInput)
+        root.addView(TextView(context).apply {
+            text = "تنبيه: استخدام OpenAI API قد يتطلب رصيداً مدفوعاً. لا يوجد ضمان لاستخدام مجاني."
+            textSize = 11f; setTextColor(Color.DKGRAY)
+        })
+        root.addView(Button(context).apply {
+            text = "حذف مفتاح OpenAI المحفوظ"
+            setOnClickListener {
+                AlertDialog.Builder(context).setTitle("حذف المفتاح")
+                    .setMessage("هل تريد حذف مفتاح OpenAI المحفوظ؟")
+                    .setNegativeButton("إلغاء", null)
+                    .setPositiveButton("حذف") { _, _ ->
+                        settings.clearOpenAiApiKey()
+                        openAiStatus.text = "الحالة: غير محفوظ ✗"; openAiStatus.setTextColor(Color.RED)
+                    }.show()
+            }
+        })
+
         // محرك المعالجة: الخيار يُحفظ محلياً، والمحرك الداخلي لا يستخدم SubWhisper.
         root.addView(makeLabel(context, "محرك المعالجة"))
         root.addView(TextView(context).apply {
@@ -248,6 +319,23 @@ object SettingsDialog {
                         settings.groqApiKey = newKey
                         groqApiKeyStatus.text = "الحالة: محفوظ ✓"
                         groqApiKeyStatus.setTextColor(android.graphics.Color.GREEN)
+                    }
+                    val newDeepgramKey = deepgramKeyInput.text.toString().trim()
+                    if (newDeepgramKey.isNotEmpty()) {
+                        settings.deepgramApiKey = newDeepgramKey
+                        deepgramStatus.text = "الحالة: محفوظ ✓"
+                        deepgramStatus.setTextColor(Color.GREEN)
+                    }
+                    val newOpenAiKey = openAiKeyInput.text.toString().trim()
+                    if (newOpenAiKey.isNotEmpty()) {
+                        settings.openAiApiKey = newOpenAiKey
+                        openAiStatus.text = "الحالة: محفوظ ✓"
+                        openAiStatus.setTextColor(Color.GREEN)
+                    }
+                    settings.sttProvider = when (providerSpinner.selectedItemPosition) {
+                        1 -> SubtitleSettings.STT_DEEPGRAM
+                        2 -> SubtitleSettings.STT_OPENAI
+                        else -> SubtitleSettings.STT_GROQ
                     }
                     overlay.applySettings(settings)
                     onSaved()

@@ -11,8 +11,8 @@ android {
         applicationId = "com.sari.subtitle.v2"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-stage1"
+        versionCode = 10
+        versionName = "0.10.0-stage10-multiplatform-web-audio"
     }
 
     signingConfigs {

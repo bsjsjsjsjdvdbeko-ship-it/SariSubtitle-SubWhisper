@@ -96,7 +96,7 @@ class SariSubtitleActivity : AppCompatActivity() {
                 "AppleWebKit/537.36 (KHTML, like Gecko) " +
                 "Chrome/120.0.0.0 Safari/537.36"
         }
-        WebView.setWebContentsDebuggingEnabled(true)
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -117,13 +117,25 @@ class SariSubtitleActivity : AppCompatActivity() {
             openSrtGenerator()
         }
 
+        findViewById<Button>(R.id.importSrtFromUrlButton).setOnClickListener {
+            promptImportSrtFromUrl()
+        }
+
+        findViewById<Button>(R.id.transcribeDirectMediaUrlButton).setOnClickListener {
+            promptTranscribeDirectMediaUrl()
+        }
+
+        findViewById<Button>(R.id.analyzeLinkButton).setOnClickListener {
+            analyzeCurrentLink()
+        }
+
 
         findViewById<Button>(R.id.transcribeAudioButton).setOnClickListener {
             openAudioPicker()
         }
 
         findViewById<Button>(R.id.transcribeXAutoButton).setOnClickListener {
-            transcribeXAuto()
+            transcribeCurrentWebVideo()
         }
 
         findViewById<Button>(R.id.pasteLinkTranscribeButton).setOnClickListener {
@@ -277,13 +289,282 @@ class SariSubtitleActivity : AppCompatActivity() {
         pollCurrentTimeOnce()
     }
 
-    /** يبدأ إنشاء SRT حسب محرك المعالجة المختار في الإعدادات. */
+    /** تحليل الرابط قبل محاولة معالجته، لتوضيح ما يمكن فعله فعلياً دون افتراض أن كل منصة قابلة للاستخراج. */
+    private fun analyzeCurrentLink() {
+        val raw = urlInput.text.toString().trim().ifBlank { webView.url.orEmpty().trim() }
+        val result = LinkSupportAnalyzer.analyze(raw)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(result.title)
+            .setMessage(result.details)
+            .setPositiveButton("نسخ الرابط") { _, _ ->
+                if (result.normalizedUrl.isNotBlank()) {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Video URL", result.normalizedUrl))
+                    statusText.text = "تم نسخ الرابط. ${result.shortStatus}"
+                    Toast.makeText(this, "تم نسخ الرابط", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNeutralButton("فتح الرابط") { _, _ ->
+                if (result.normalizedUrl.isNotBlank()) {
+                    urlInput.setText(result.normalizedUrl)
+                    webView.loadUrl(result.normalizedUrl)
+                }
+            }
+            .setNegativeButton("إغلاق", null)
+            .show()
+        statusText.text = result.shortStatus
+    }
+
+    /**
+     * ينزّل ملف صوت/فيديو من رابط مباشر فقط ثم يرسله إلى مزود STT المختار لإنشاء SRT.
+     * لا يحاول استخراج روابط الوسائط من صفحات X/YouTube؛ هذه تحتاج مسار استخراج منفصلاً.
+     */
+    private fun promptTranscribeDirectMediaUrl() {
+        val input = EditText(this).apply {
+            hint = "https://example.com/video.mp4 أو audio.mp3"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            setText(urlInput.text.toString().takeIf { it.contains(".") && !it.contains("x.com") }.orEmpty())
+        }
+        val wrap = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 8, 40, 0)
+            addView(input, LinearLayout.LayoutParams(-1, -2))
+            addView(TextView(this@SariSubtitleActivity).apply {
+                text = "يعمل فقط مع رابط مباشر لملف صوت/فيديو يمكن تنزيله دون تسجيل دخول. لا يعمل مع رابط صفحة X أو YouTube العادي. حد التنزيل 24 MB، وبعده يُرسل الملف إلى مزود STT المختار؛ قد تُحسب تكلفة/حصة API وفق حسابك."
+                setPadding(0, 12, 0, 0)
+            })
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("إنشاء SRT من ملف وسائط مباشر")
+            .setView(wrap)
+            .setNegativeButton("إلغاء", null)
+            .setPositiveButton("تنزيل وتفريغ") { _, _ ->
+                val link = input.text.toString().trim()
+                val uri = try { Uri.parse(link) } catch (_: Exception) { null }
+                if (uri == null || uri.scheme !in listOf("http", "https") || uri.host.isNullOrBlank()) {
+                    Toast.makeText(this, "أدخل رابط HTTP/HTTPS صالحاً", Toast.LENGTH_LONG).show()
+                } else if (!hasSelectedSttKey()) {
+                    Toast.makeText(this, "أدخل مفتاح ${settings.sttProviderLabel} من الإعدادات أولاً", Toast.LENGTH_LONG).show()
+                } else {
+                    chooseDirectMediaLanguage(link)
+                }
+            }
+            .show()
+    }
+
+    private fun chooseDirectMediaLanguage(link: String) {
+        val labels = arrayOf("اكتشاف اللغة تلقائياً", "العربية", "الإنجليزية")
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("لغة الصوت")
+            .setItems(labels) { _, selected ->
+                val lang = when (selected) { 1 -> "ar"; 2 -> "en"; else -> "auto" }
+                downloadAndTranscribeDirectMedia(link, lang)
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun downloadAndTranscribeDirectMedia(link: String, language: String) {
+        val progress = ProgressDialog(this).apply {
+            setTitle("إنشاء ملف SRT")
+            setMessage("جارٍ تنزيل ملف الوسائط…")
+            setProgressStyle(ProgressDialog.STYLE_SPINNER)
+            setCancelable(false)
+            show()
+        }
+        statusText.text = "جارٍ تنزيل ملف الوسائط من الرابط المباشر…"
+        Thread {
+            var temp: java.io.File? = null
+            var connection: java.net.HttpURLConnection? = null
+            try {
+                connection = (java.net.URL(link).openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 20_000
+                    readTimeout = 60_000
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+                }
+                val code = connection.responseCode
+                if (code !in 200..299) throw IOException("فشل تنزيل الملف (HTTP $code). قد يكون الرابط صفحة ويب وليس ملف وسائط مباشراً.")
+                val type = connection.contentType.orEmpty().lowercase(java.util.Locale.ROOT)
+                if (type.contains("text/html") || type.contains("application/json")) {
+                    throw IOException("الرابط أعاد صفحة ويب/JSON وليس ملف وسائط مباشراً. روابط صفحات X وYouTube لا تعمل بهذا المسار.")
+                }
+                val declared = connection.contentLengthLong
+                if (declared > 24L * 1024L * 1024L) throw IOException("حجم الملف يتجاوز 24 MB. اختر ملفاً أصغر لتجنب استهلاك البيانات.")
+                val path = Uri.parse(link).lastPathSegment.orEmpty()
+                val ext = path.substringAfterLast('.', "bin").lowercase(java.util.Locale.ROOT).takeIf { it.matches(Regex("[a-z0-9]{1,8}")) } ?: "bin"
+                temp = java.io.File.createTempFile("direct_media_", ".$ext", cacheDir)
+                var total = 0L
+                connection.inputStream.use { inputStream -> temp!!.outputStream().buffered().use { output ->
+                    val buffer = ByteArray(8192)
+                    while (true) {
+                        val count = inputStream.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > 24L * 1024L * 1024L) throw IOException("توقف التنزيل لأن الملف تجاوز 24 MB.")
+                        output.write(buffer, 0, count)
+                    }
+                } }
+                if (total == 0L) throw IOException("الملف الذي تم تنزيله فارغ.")
+                runOnUiThread { progress.setMessage("تم تنزيل ${(total / 1024)} KB — جارٍ التفريغ عبر ${settings.sttProviderLabel}…") }
+                val result = transcribeWithSelectedProvider(Uri.fromFile(temp!!), language)
+                runOnUiThread {
+                    if (isFinishing) return@runOnUiThread
+                    progress.dismiss()
+                    pendingWhisperSrt = result.srt
+                    statusText.text = "اكتمل التفريغ: ${result.segmentCount} مقطع"
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("تم إنشاء SRT")
+                        .setMessage("تم استخراج ${result.segmentCount} مقطعاً. احفظ الملف لاستخدامه لاحقاً.")
+                        .setNegativeButton("إغلاق", null)
+                        .setPositiveButton("حفظ SRT") { _, _ ->
+                            val saveIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "application/x-subrip"
+                                putExtra(Intent.EXTRA_TITLE, "transcription.srt")
+                            }
+                            startActivityForResult(saveIntent, REQ_SAVE_WHISPER_SRT)
+                        }
+                        .show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    if (!isFinishing) {
+                        progress.dismiss()
+                        statusText.text = "تعذر إنشاء SRT من الرابط المباشر"
+                        androidx.appcompat.app.AlertDialog.Builder(this)
+                            .setTitle("تعذر إنشاء SRT")
+                            .setMessage(e.message ?: "خطأ غير معروف")
+                            .setPositiveButton("حسناً", null)
+                            .show()
+                    }
+                }
+            } finally {
+                connection?.disconnect()
+                temp?.delete()
+            }
+        }.start()
+    }
+
+    /** يتيح جلب ملف ترجمة SRT منشور برابط مباشر؛ لا يستخرج الصوت من رابط الفيديو. */
+    private fun promptImportSrtFromUrl() {
+        val input = EditText(this).apply {
+            hint = "https://example.com/subtitles.srt"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            setText(urlInput.text.toString().takeIf { it.lowercase().endsWith(".srt") }.orEmpty())
+            setSelection(text.length)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("استيراد SRT من رابط مباشر")
+            .setMessage("أدخل رابط ملف ترجمة SRT مباشر. هذا يستورد ملف ترجمة موجوداً ولا ينشئ ترجمة من رابط الفيديو.")
+            .setView(input)
+            .setNegativeButton("إلغاء", null)
+            .setPositiveButton("تحميل الملف") { _, _ ->
+                val subtitleUrl = input.text.toString().trim()
+                val uri = try { Uri.parse(subtitleUrl) } catch (_: Exception) { null }
+                if (uri == null || uri.scheme !in listOf("http", "https") || uri.host.isNullOrBlank()) {
+                    Toast.makeText(this, "أدخل رابط SRT صالحاً يبدأ بـ https:// أو http://", Toast.LENGTH_LONG).show()
+                } else {
+                    downloadSrtFromUrl(subtitleUrl)
+                }
+            }
+            .show()
+    }
+
+    private fun downloadSrtFromUrl(subtitleUrl: String) {
+        val progress = ProgressDialog(this).apply {
+            setTitle("تحميل ملف SRT")
+            setMessage("جارٍ تنزيل ملف الترجمة…")
+            setProgressStyle(ProgressDialog.STYLE_SPINNER)
+            setCancelable(true)
+            show()
+        }
+        val worker = Thread {
+            var connection: java.net.HttpURLConnection? = null
+            try {
+                connection = (java.net.URL(subtitleUrl).openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 15000
+                    readTimeout = 25000
+                    instanceFollowRedirects = true
+                    setRequestProperty("Accept", "text/plain, application/x-subrip, */*")
+                    setRequestProperty("User-Agent", "SariSubtitle/0.4 Android")
+                }
+                val code = connection.responseCode
+                if (code !in 200..299) throw IOException("تعذر تحميل الملف (HTTP $code)")
+                val length = connection.contentLengthLong
+                if (length > 5L * 1024L * 1024L) throw IOException("حجم ملف SRT أكبر من الحد المسموح (5 MB)")
+                val bytes = connection.inputStream.use { stream ->
+                    val out = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(8192)
+                    var total = 0L
+                    while (true) {
+                        if (Thread.currentThread().isInterrupted) throw IOException("تم إلغاء التحميل")
+                        val n = stream.read(buffer)
+                        if (n < 0) break
+                        total += n
+                        if (total > 5L * 1024L * 1024L) throw IOException("حجم ملف SRT أكبر من الحد المسموح (5 MB)")
+                        out.write(buffer, 0, n)
+                    }
+                    out.toByteArray()
+                }
+                val text = String(bytes, Charsets.UTF_8).removePrefix("\uFEFF")
+                val cues = SrtParser.parse(bytes.inputStream())
+                if (cues.isEmpty()) throw IOException("الرابط لا يحتوي على مقاطع SRT صالحة. تأكد أنه رابط ملف مباشر وليس صفحة ويب.")
+                runOnUiThread {
+                    if (!isFinishing) {
+                        repo.setCues(cues)
+                        lastSrtText = text
+                        val videoUrl = webView.url ?: urlInput.text.toString().trim()
+                        if (videoUrl.startsWith("http")) {
+                            storage.save(videoUrl, text, cues.size)
+                            lastSrtUrl = videoUrl
+                        }
+                        overlayOn = true
+                        statusText.text = "تم تحميل SRT من رابط مباشر: ${cues.size} مقطع${if (videoUrl.startsWith("http")) " — حُفظ للفيديو الحالي" else ""}"
+                        Toast.makeText(this, "تم استيراد ${cues.size} مقطع SRT", Toast.LENGTH_LONG).show()
+                    }
+                    progress.dismiss()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    if (!isFinishing) {
+                        progress.dismiss()
+                        androidx.appcompat.app.AlertDialog.Builder(this)
+                            .setTitle("تعذر تحميل SRT")
+                            .setMessage(e.message ?: "خطأ غير معروف")
+                            .setPositiveButton("حسناً", null)
+                            .show()
+                    }
+                }
+            } finally {
+                connection?.disconnect()
+            }
+        }
+        progress.setOnCancelListener { worker.interrupt() }
+        worker.start()
+    }
+
+    /**
+     * Generates SRT using a real provider-specific path where possible.
+     * Public YouTube captions are fetched directly (no video/audio download); other platforms
+     * continue through the explicit supported paths instead of pretending universal extraction.
+     */
     private fun openSrtGenerator() {
         val videoUrl = (urlInput.text.toString().trim().ifBlank { webView.url ?: "" }).trim()
         val uri = try { Uri.parse(videoUrl) } catch (_: Exception) { null }
         if (videoUrl.isBlank() || uri == null || uri.scheme !in listOf("http", "https") || uri.host.isNullOrBlank()) {
             Toast.makeText(this, "ألصق رابط فيديو صحيحاً أولاً", Toast.LENGTH_LONG).show()
             urlInput.requestFocus()
+            return
+        }
+
+        val youtubeId = YouTubeCaptionExtractor.getVideoId(videoUrl)
+        if (youtubeId != null) {
+            promptYouTubeCaptionExtraction(videoUrl)
             return
         }
 
@@ -314,6 +595,74 @@ class SariSubtitleActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Toast.makeText(this, "تعذّر تجهيز الرابط: ${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    /** Extracts an existing public YouTube caption track without downloading the video. */
+    private fun promptYouTubeCaptionExtraction(videoUrl: String) {
+        val labels = arrayOf("أفضل مسار متاح تلقائياً", "العربية", "الإنجليزية")
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("إنشاء SRT من ترجمة YouTube المتاحة")
+            .setMessage("سيحاول التطبيق جلب الترجمة/التفريغ النصي الذي يكشفه YouTube علناً، دون تنزيل الفيديو أو الصوت. قد تكون الترجمة تلقائية أو بلغة الفيديو، ولا تعمل هذه الطريقة مع الفيديوهات الخاصة أو التي لا تعرض مسارات ترجمة. إذا لم تتوفر ترجمة، يمكنك تجربة مسار ملف الوسائط المباشر أو استيراد SRT موجود.")
+            .setItems(labels) { _, selected ->
+                val language = when (selected) { 1 -> "ar"; 2 -> "en"; else -> "auto" }
+                fetchYouTubeCaptions(videoUrl, language)
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun fetchYouTubeCaptions(videoUrl: String, language: String) {
+        val progress = ProgressDialog(this).apply {
+            setTitle("جلب ترجمة YouTube")
+            setMessage("جارٍ فحص مسارات الترجمة العامة…")
+            setProgressStyle(ProgressDialog.STYLE_SPINNER)
+            setCancelable(false)
+            show()
+        }
+        statusText.text = "جارٍ محاولة استخراج مسار ترجمة عام من YouTube دون تنزيل الفيديو…"
+        Thread {
+            try {
+                val result = YouTubeCaptionExtractor.extract(videoUrl, language)
+                runOnUiThread {
+                    if (isFinishing) return@runOnUiThread
+                    progress.dismiss()
+                    pendingWhisperSrt = result.srt
+                    val cues = SrtParser.parse(result.srt.byteInputStream(Charsets.UTF_8))
+                    repo.setCues(cues)
+                    lastSrtText = result.srt
+                    lastSrtUrl = videoUrl
+                    storage.save(videoUrl, result.srt, cues.size)
+                    overlayOn = true
+                    statusText.text = "تم جلب ${result.cueCount} مقطع من ترجمة YouTube (${result.languageCode})"
+                    val generated = if (result.autoGenerated) "تلقائية" else "مضافة"
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("تم إنشاء ملف SRT")
+                        .setMessage("تم جلب ${result.cueCount} مقطعاً باللغة ${result.languageCode}. نوع المسار: $generated. حُفظت نسخة داخل التطبيق لإعادة استخدامها. إذا أردت ترجمتها للعربية، استخدم زر ترجمة ملف SRT.")
+                        .setNegativeButton("إغلاق", null)
+                        .setPositiveButton("حفظ SRT") { _, _ ->
+                            val saveIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "application/x-subrip"
+                                putExtra(Intent.EXTRA_TITLE, "youtube-captions-${YouTubeCaptionExtractor.getVideoId(videoUrl)}.srt")
+                            }
+                            startActivityForResult(saveIntent, REQ_SAVE_WHISPER_SRT)
+                        }
+                        .show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    if (!isFinishing) {
+                        progress.dismiss()
+                        statusText.text = "تعذر جلب ترجمة YouTube العامة"
+                        androidx.appcompat.app.AlertDialog.Builder(this)
+                            .setTitle("لم تتوفر ترجمة قابلة للجلب")
+                            .setMessage((e.message ?: "خطأ غير معروف") + "\n\nلم يتم تنزيل الفيديو. يمكنك تجربة زر «رابط مباشر للصوت/الفيديو ← إنشاء SRT» إذا كان لديك رابط ملف مباشر يمكن الوصول إليه، أو استيراد ملف SRT جاهز. لا يضمن هذا التطبيق استخراج الصوت من كل رابط اجتماعي.")
+                            .setPositiveButton("حسناً", null)
+                            .show()
+                    }
+                }
+            }
+        }.start()
     }
 
     /**
@@ -439,7 +788,7 @@ class SariSubtitleActivity : AppCompatActivity() {
         }
         Thread {
             try {
-                val translated = SrtTranslationService.translateSrt(raw, pendingSourceLang, pendingTargetLang) { done, total ->
+                val translated = SrtTranslationService.translateSrt(raw, pendingSourceLang, pendingTargetLang, applicationContext) { done, total ->
                     runOnUiThread { progress.setMessage("جارٍ ترجمة المقاطع: $done / $total") }
                 }
                 pendingTranslatedSrt = translated
@@ -524,7 +873,8 @@ class SariSubtitleActivity : AppCompatActivity() {
                     targetLang = "ar",
                     onDetected = { lang ->
                         runOnUiThread { progress.setMessage("🌐 اللغة المكتشفة: $lang\nجارٍ الترجمة…") }
-                    }
+                    },
+                    context = applicationContext
                 ) { done, total ->
                     runOnUiThread { progress.setMessage("جارٍ ترجمة المقاطع: $done / $total") }
                 }
@@ -556,7 +906,7 @@ class SariSubtitleActivity : AppCompatActivity() {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Groq Whisper — تفريغ صوت
+    // تفريغ صوت عبر مزود STT المختار (Groq أو Deepgram)
     // ═══════════════════════════════════════════════════════════
 
         private fun testCaptureStream() {
@@ -621,20 +971,31 @@ class SariSubtitleActivity : AppCompatActivity() {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // تفريغ X تلقائياً: captureStream + MediaRecorder + Groq
+    // تفريغ فيديو الصفحة الحالية: captureStream + MediaRecorder + مزود STT المختار
+    // يعمل فقط عندما تسمح المنصة وWebView بالتقاط مسار الصوت.
     // ═══════════════════════════════════════════════════════════
     
-    private fun transcribeXAuto() {
-        Toast.makeText(this, "🔍 جارٍ فحص الفيديو…", Toast.LENGTH_SHORT).show()
-        statusText.text = "🔍 فحص الفيديو…"
+    private fun transcribeCurrentWebVideo() {
+        Toast.makeText(this, "🔍 جارٍ فحص فيديو الصفحة الحالية…", Toast.LENGTH_SHORT).show()
+        statusText.text = "🔍 فحص فيديو الصفحة الحالية…"
         
         val js = """
             (function() {
               try {
-                var v = document.querySelector('video');
-                if (!v) return JSON.stringify({error: "no_video"});
+                var all = Array.from(document.querySelectorAll('video'));
+                if (!all.length) return JSON.stringify({error: "no_video"});
+                // Prefer a playing video, then the largest video element.
+                all.sort(function(a,b) {
+                  var ap = !a.paused && !a.ended ? 1 : 0;
+                  var bp = !b.paused && !b.ended ? 1 : 0;
+                  if (ap !== bp) return bp - ap;
+                  return ((b.videoWidth||b.clientWidth)*(b.videoHeight||b.clientHeight)) - ((a.videoWidth||a.clientWidth)*(a.videoHeight||a.clientHeight));
+                });
+                var v = all[0];
+                window.__sariSelectedVideo = v;
                 return JSON.stringify({
                   hasVideo: true,
+                  videoCount: all.length,
                   duration: v.duration || 0,
                   paused: v.paused,
                   canCapture: typeof v.captureStream === 'function',
@@ -662,14 +1023,17 @@ class SariSubtitleActivity : AppCompatActivity() {
                     val duration = obj.optDouble("duration", 0.0)
                     if (!canCapture || !canRecord) {
                         android.app.AlertDialog.Builder(this)
-                            .setTitle("غير مدعوم")
-                            .setMessage("WebView لا يدعم captureStream أو MediaRecorder.")
+                            .setTitle("التقاط الصوت غير متاح")
+                            .setMessage("هذه الصفحة لا تتيح التقاط صوت الفيديو عبر WebView. جرّب تشغيل الفيديو داخل الصفحة، أو استخدم رابط وسائط مباشر/ملفاً محلياً. بعض المنصات تمنع التقاط الصوت أو تستخدم DRM.")
                             .setPositiveButton("حسناً", null)
                             .show()
                         return@runOnUiThread
                     }
-                    // ابدأ التسجيل
-                    startXRecording(duration)
+                    // هذا المسار تجريبي ويقيد التسجيل إلى دقيقتين لتقليل الذاكرة والرفع.
+                    if (duration > 120.0) {
+                        Toast.makeText(this, "سيتم التقاط أول دقيقتين فقط في هذا المسار التجريبي. للفيديو الكامل استخدم ملف صوت/فيديو محلياً.", Toast.LENGTH_LONG).show()
+                    }
+                    startCurrentWebVideoRecording(duration)
                 } catch (e: Exception) {
                     Toast.makeText(this, "خطأ: ${e.message}", Toast.LENGTH_LONG).show()
                 }
@@ -677,10 +1041,10 @@ class SariSubtitleActivity : AppCompatActivity() {
         }
     }
     
-    private fun startXRecording(duration: Double) {
+    private fun startCurrentWebVideoRecording(duration: Double) {
         val recordDurationMs = (minOf(duration * 1000.0, 120000.0)).toInt()  // 2 دقيقة كحد أقصى
         val progress = android.app.ProgressDialog(this).apply {
-            setTitle("🎙️ تسجيل الصوت من الفيديو")
+            setTitle("🎙️ تسجيل صوت الفيديو الحالي")
             setMessage("جارٍ التسجيل…")
             setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER)
             setCancelable(false)
@@ -702,7 +1066,7 @@ class SariSubtitleActivity : AppCompatActivity() {
         val js = """
             (async function() {
               try {
-                var v = document.querySelector('video');
+                var v = window.__sariSelectedVideo || document.querySelector('video');
                 if (!v) return JSON.stringify({error: "no_video"});
                 if (v.paused) await v.play();
                 await new Promise(r => setTimeout(r, 500));
@@ -756,7 +1120,7 @@ class SariSubtitleActivity : AppCompatActivity() {
                     }
                     val b64 = obj.getString("audio")
                     val sizeKB = obj.optInt("size", 0) / 1024
-                    statusText.text = "✅ تم تسجيل $sizeKB KB — جارٍ إرسال إلى Groq…"
+                    statusText.text = "✅ تم تسجيل $sizeKB KB — جارٍ إرسال إلى ${settings.sttProviderLabel}…"
                     val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
                     sendToGroq(bytes)
                 } catch (e: Exception) {
@@ -767,13 +1131,13 @@ class SariSubtitleActivity : AppCompatActivity() {
     }
     
     private fun sendToGroq(audioBytes: ByteArray) {
-        if (settings.groqApiKey.isBlank()) {
-            Toast.makeText(this, "أدخل مفتاح Groq من الإعدادات أولاً", Toast.LENGTH_LONG).show()
+        if (!hasSelectedSttKey()) {
+            Toast.makeText(this, "أدخل مفتاح ${settings.sttProviderLabel} من الإعدادات أولاً", Toast.LENGTH_LONG).show()
             return
         }
         
         val progress = android.app.ProgressDialog(this).apply {
-            setTitle("🌐 Groq Whisper")
+            setTitle("🌐 ${settings.sttProviderLabel}")
             setMessage("جارٍ التفريغ…")
             setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER)
             setCancelable(false)
@@ -796,17 +1160,12 @@ class SariSubtitleActivity : AppCompatActivity() {
                 val tempFile = java.io.File(cacheDir, "x_audio_${System.currentTimeMillis()}.webm")
                 tempFile.writeBytes(audioBytes)
                 
-                val service = GroqWhisperService(
-                    context = applicationContext,
-                    apiKeyProvider = { settings.groqApiKey }
-                )
-                
-                val result = service.transcribe(
-                    android.net.Uri.fromFile(tempFile),
-                    "auto"
-                )
-                
-                tempFile.delete()
+                val result = try {
+                    transcribeWithSelectedProvider(android.net.Uri.fromFile(tempFile), "auto")
+                } finally {
+                    // Always remove the temporary recording, including on API errors.
+                    tempFile.delete()
+                }
                 
                 handler.removeCallbacks(timer)
                 runOnUiThread {
@@ -835,7 +1194,32 @@ class SariSubtitleActivity : AppCompatActivity() {
         }.start()
     }
 
-private fun openAudioPicker() {
+private data class SelectedTranscriptionResult(val language: String, val text: String, val srt: String, val segmentCount: Int)
+
+    private fun hasSelectedSttKey(): Boolean = when (settings.sttProvider) {
+        SubtitleSettings.STT_DEEPGRAM -> settings.deepgramApiKey.isNotBlank()
+        SubtitleSettings.STT_OPENAI -> settings.openAiApiKey.isNotBlank()
+        else -> settings.groqApiKey.isNotBlank()
+    }
+
+    private fun transcribeWithSelectedProvider(uri: Uri, language: String): SelectedTranscriptionResult {
+        return when (settings.sttProvider) {
+            SubtitleSettings.STT_DEEPGRAM -> {
+                val result = DeepgramTranscriptionService(applicationContext) { settings.deepgramApiKey }.transcribe(uri, language)
+                SelectedTranscriptionResult(result.language, result.text, result.srt, result.segmentCount)
+            }
+            SubtitleSettings.STT_OPENAI -> {
+                val result = OpenAIWhisperService(applicationContext) { settings.openAiApiKey }.transcribe(uri, language)
+                SelectedTranscriptionResult(result.language, result.text, result.srt, result.segmentCount)
+            }
+            else -> {
+                val result = GroqWhisperService(applicationContext) { settings.groqApiKey }.transcribe(uri, language)
+                SelectedTranscriptionResult(result.language, result.text, result.srt, result.segmentCount)
+            }
+        }
+    }
+
+    private fun openAudioPicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "audio/*"
@@ -860,14 +1244,14 @@ private fun openAudioPicker() {
     }
 
     private fun runGroqTranscription(uri: Uri, language: String) {
-        if (settings.groqApiKey.isBlank()) {
-            Toast.makeText(this, "أدخل مفتاح Groq من الإعدادات أولاً", Toast.LENGTH_LONG).show()
+        if (!hasSelectedSttKey()) {
+            Toast.makeText(this, "أدخل مفتاح ${settings.sttProviderLabel} من الإعدادات أولاً", Toast.LENGTH_LONG).show()
             return
         }
 
         // إنشاء ProgressDialog مع مؤقت
         val progress = android.app.ProgressDialog(this).apply {
-            setTitle("تفريغ الصوت (Groq Whisper)")
+            setTitle("تفريغ الصوت (${settings.sttProviderLabel})")
             setMessage("جارٍ بدء الطلب…")
             setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER)
             setCancelable(false)
@@ -889,7 +1273,7 @@ private fun openAudioPicker() {
                 val elapsed = ((System.currentTimeMillis() - startTime) / 1000).toInt()
                 val mins = elapsed / 60
                 val secs = elapsed % 60
-                progress.setMessage("جارٍ إرسال الملف إلى Groq…\nمضى: ${mins}:${String.format("%02d", secs)}")
+                progress.setMessage("جارٍ إرسال الملف إلى ${settings.sttProviderLabel}…\nمضى: ${mins}:${String.format("%02d", secs)}")
                 handler.postDelayed(this, 1000)
             }
         }
@@ -899,11 +1283,7 @@ private fun openAudioPicker() {
 
         Thread {
             try {
-                val service = GroqWhisperService(
-                    context = applicationContext,
-                    apiKeyProvider = { settings.groqApiKey }
-                )
-                val result = service.transcribe(uri, language)
+                val result = transcribeWithSelectedProvider(uri, language)
                 val totalTime = ((System.currentTimeMillis() - startTime) / 1000).toInt()
                 cancelled = true
                 runOnUiThread {

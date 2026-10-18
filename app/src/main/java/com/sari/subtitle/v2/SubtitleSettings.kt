@@ -18,6 +18,10 @@ class SubtitleSettings(context: Context) {
         private const val KEY_BOLD = "bold"
         private const val KEY_OFFSET = "offset_ms"
         private const val KEY_PROCESSING_ENGINE = "processing_engine"
+        private const val KEY_STT_PROVIDER = "stt_provider"
+        const val STT_GROQ = "groq"
+        const val STT_DEEPGRAM = "deepgram"
+        const val STT_OPENAI = "openai"
 
         val TEXT_SIZES = floatArrayOf(14f, 18f, 22f, 28f, 34f)
         val TEXT_SIZE_LABELS = arrayOf("صغير", "متوسط", "كبير", "كبير جداً", "ضخم")
@@ -72,6 +76,33 @@ class SubtitleSettings(context: Context) {
 
     fun hasGroqApiKey(): Boolean {
         return try { groqKeyStore.read().isNotBlank() } catch (e: Exception) { false }
+    }
+
+    private val deepgramKeyStore = DeepgramApiKeyStore(context.applicationContext)
+    var deepgramApiKey: String
+        get() = try { deepgramKeyStore.read() } catch (_: Exception) { "" }
+        set(value) { if (value.isBlank()) deepgramKeyStore.clear() else deepgramKeyStore.save(value) }
+    fun clearDeepgramApiKey() = deepgramKeyStore.clear()
+    fun hasDeepgramApiKey(): Boolean = try { deepgramKeyStore.read().isNotBlank() } catch (_: Exception) { false }
+
+    private val openAiKeyStore = OpenAIApiKeyStore(context.applicationContext)
+    var openAiApiKey: String
+        get() = try { openAiKeyStore.read() } catch (_: Exception) { "" }
+        set(value) { if (value.isBlank()) openAiKeyStore.clear() else openAiKeyStore.save(value) }
+    fun clearOpenAiApiKey() = openAiKeyStore.clear()
+    fun hasOpenAiApiKey(): Boolean = try { openAiKeyStore.read().isNotBlank() } catch (_: Exception) { false }
+
+    var sttProvider: String
+        get() = prefs.getString(KEY_STT_PROVIDER, STT_GROQ) ?: STT_GROQ
+        set(value) = prefs.edit().putString(KEY_STT_PROVIDER, when (value) {
+            STT_DEEPGRAM -> STT_DEEPGRAM
+            STT_OPENAI -> STT_OPENAI
+            else -> STT_GROQ
+        }).apply()
+    val sttProviderLabel: String get() = when (sttProvider) {
+        STT_DEEPGRAM -> "Deepgram Nova-3"
+        STT_OPENAI -> "OpenAI Whisper"
+        else -> "Groq Whisper"
     }
 
 

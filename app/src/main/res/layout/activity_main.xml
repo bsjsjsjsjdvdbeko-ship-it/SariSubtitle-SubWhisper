@@ -41,6 +41,33 @@
         android:text="إنشاء SRT من رابط الفيديو" />
 
     <Button
+        android:id="@+id/analyzeLinkButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp"
+        android:layout_marginBottom="2dp"
+        android:text="فحص الرابط وتحديد أفضل طريقة لإنشاء SRT" />
+
+    <Button
+        android:id="@+id/transcribeDirectMediaUrlButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp"
+        android:layout_marginBottom="2dp"
+        android:text="رابط مباشر للصوت/الفيديو ← إنشاء SRT" />
+
+    <Button
+        android:id="@+id/importSrtFromUrlButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp"
+        android:layout_marginBottom="2dp"
+        android:text="استيراد ملف SRT من رابط مباشر" />
+
+    <Button
         android:id="@+id/transcribeAudioButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -56,14 +83,7 @@
         android:layout_marginStart="4dp"
         android:layout_marginEnd="4dp"
         android:layout_marginBottom="2dp"
-        android:text="🎙️ تفريغ X تلقائياً (تسجيل + Groq + SRT)" />
-
-    <Button
-        android:id="@+id/recordButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:visibility="gone"
-        android:text="تسجيل" />
+        android:text="🎙️ تفريغ صوت الفيديو الحالي (المنصات المدعومة)" />
 
     <Button
         android:id="@+id/pasteLinkTranscribeButton"
