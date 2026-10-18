@@ -161,6 +161,10 @@ class SariSubtitleActivity : AppCompatActivity() {
             pollCurrentTimeOnce()
         }
 
+        findViewById<Button>(R.id.testCaptureButton).setOnClickListener {
+            testCaptureStream()
+        }
+
         // اختبار captureStream
         findViewById<Button>(R.id.checkTimeButton).setOnLongClickListener {
             testCaptureStream()
