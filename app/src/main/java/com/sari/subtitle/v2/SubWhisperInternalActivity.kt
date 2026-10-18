@@ -226,7 +226,7 @@ class SubWhisperInternalActivity : AppCompatActivity() {
                     if (resultDelivered || isFinishing) return@runOnUiThread
                     resultDelivered = true
                     setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_SRT_TEXT, text))
-                    Toast.makeText(this, "تم التقاط SRT وإرجاعه إلى Sari Subtitle", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@SubWhisperInternalActivity, "تم التقاط SRT وإرجاعه إلى Sari Subtitle", Toast.LENGTH_SHORT).show()
                     finish()
                 }
             } catch (e: Exception) {
