@@ -598,8 +598,14 @@ class SariSubtitleActivity : AppCompatActivity() {
             } catch (_: Exception) { raw ?: "null" }
             runOnUiThread {
                 android.app.AlertDialog.Builder(this)
-                    .setTitle("فحص captureStream")
-                    .setMessage(decoded)
+                    .setTitle("فحص captureStream + WebView")
+                    .setMessage(
+                        "دعم WebView:\n" +
+                        "• ArrayBuffer: $supportsArrayBuffer\n" +
+                        "• WebMessageListener: $supportsWebMessageListener\n\n" +
+                        "captureStream:\n" +
+                        decoded
+                    )
                     .setPositiveButton("حسناً", null)
                     .show()
             }
