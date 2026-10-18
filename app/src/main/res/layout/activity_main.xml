@@ -139,6 +139,7 @@
         android:visibility="gone">
 
         <Button android:id="@+id/transcribeXAutoButton" android:layout_width="1dp" android:layout_height="1dp" />
+        <Button android:id="@+id/testCaptureButton" android:layout_width="1dp" android:layout_height="1dp" />
         <Button android:id="@+id/transcribeAudioButton" android:layout_width="1dp" android:layout_height="1dp" />
         <Button android:id="@+id/transcribeDirectMediaUrlButton" android:layout_width="1dp" android:layout_height="1dp" />
         <Button android:id="@+id/importSrtFromUrlButton" android:layout_width="1dp" android:layout_height="1dp" />
