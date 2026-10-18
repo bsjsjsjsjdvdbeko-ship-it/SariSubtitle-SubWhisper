@@ -96,7 +96,7 @@ class SariSubtitleActivity : AppCompatActivity() {
                 "AppleWebKit/537.36 (KHTML, like Gecko) " +
                 "Chrome/120.0.0.0 Safari/537.36"
         }
-        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
+        WebView.setWebContentsDebuggingEnabled(true)
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -182,9 +182,6 @@ class SariSubtitleActivity : AppCompatActivity() {
             testCaptureStream()
         }
 
-        findViewById<Button>(R.id.recordButton).setOnClickListener {
-            startAudioRecording()
-        }
 
         // اختبار captureStream
         findViewById<Button>(R.id.checkTimeButton).setOnLongClickListener {
