@@ -141,41 +141,77 @@ class SubWhisperInternalActivity : AppCompatActivity() {
     }
 
     private fun injectSrtDownloadHook() {
+        // حقن سكربت JavaScript يعترض تنزيلات blob: و data:
         val js = """
-            (function(){
-              if (window.__sariSrtDownloadHook) return;
-              window.__sariSrtDownloadHook = true;
-              function isSrt(a) {
-                var n = (a && a.download || '').toLowerCase();
-                var h = (a && a.href || '').toLowerCase();
-                return n.endsWith('.srt') || /\.srt(?:[?#]|$)/i.test(h) || /subtitle.*\.srt/i.test(n);
-              }
-              function send(a, ev) {
-                if (!a || !isSrt(a)) return false;
-                var href = a.href || '';
-                if (!href.startsWith('blob:') && !href.startsWith('data:')) return false;
-                if (ev) { ev.preventDefault(); ev.stopPropagation(); if (ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
-                var name = a.download || 'subtitles.srt';
-                fetch(href).then(function(r){ return r.blob(); }).then(function(blob){
-                  if (blob.size > 12582912) { alert('ملف SRT أكبر من الحد المدعوم للاستيراد'); return; }
-                  var reader = new FileReader();
-                  reader.onloadend = function(){
-                    var data = String(reader.result || '').split(',')[1] || '';
-                    if (window.SariSrtBridge) window.SariSrtBridge.receiveSrt(name, blob.type || 'application/x-subrip', data);
-                  };
-                  reader.readAsDataURL(blob);
-                }).catch(function(err){ console.log('SRT capture failed', err); });
-                return true;
-              }
-              document.addEventListener('click', function(ev){
-                var t = ev.target;
-                var a = t && t.closest ? t.closest('a[download]') : null;
-                if (a) send(a, ev);
+            (function() {
+              if (window.__sariSrtHookInstalled) return;
+              window.__sariSrtHookInstalled = true;
+
+              // 1. اعتراض window.open
+              var originalOpen = window.open;
+              window.open = function(url, name, features) {
+                if (url && (url.startsWith('blob:') || url.startsWith('data:'))) {
+                  window.__sariReceiveBlobUrl(url);
+                  return null;
+                }
+                return originalOpen.apply(this, arguments);
+              };
+
+              // 2. اعتراض النقر على روابط التنزيل
+              document.addEventListener('click', function(e) {
+                var target = e.target.closest('a');
+                if (!target) return;
+                var href = target.href;
+                if (href && (href.startsWith('blob:') || href.startsWith('data:'))) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  window.__sariReceiveBlobUrl(href);
+                }
               }, true);
-              var originalClick = HTMLAnchorElement.prototype.click;
-              HTMLAnchorElement.prototype.click = function(){
-                if (send(this, null)) return;
-                return originalClick.apply(this, arguments);
+
+              // 3. اعتراض التنزيلات التي تنشئها الصفحة عبر إنشاء روابط
+              var originalCreateElement = document.createElement;
+              document.createElement = function(tag) {
+                var el = originalCreateElement.call(document, tag);
+                if (tag.toLowerCase() === 'a') {
+                  var originalClick = el.click;
+                  el.click = function() {
+                    if (this.href && (this.href.startsWith('blob:') || this.href.startsWith('data:'))) {
+                      window.__sariReceiveBlobUrl(this.href);
+                      return;
+                    }
+                    return originalClick.apply(this, arguments);
+                  };
+                }
+                return el;
+              };
+
+              // 4. دالة استقبال الـ blob وتحويله إلى base64 وإرساله لـ Kotlin
+              window.__sariReceiveBlobUrl = function(url) {
+                try {
+                  fetch(url)
+                    .then(function(response) { return response.blob(); })
+                    .then(function(blob) {
+                      var reader = new FileReader();
+                      reader.onload = function() {
+                        var base64 = reader.result.split(',')[1];
+                        if (window.SariSrtBridge) {
+                          // استخدام الاسم الصحيح للجسر
+                          window.SariSrtBridge.receiveSrt('subtitles.srt', 'text/plain', base64);
+                        }
+                      };
+                      reader.readAsDataURL(blob);
+                    })
+                    .catch(function(err) {
+                      if (window.SariSrtBridge) {
+                        window.SariSrtBridge.onError('fetch failed: ' + err);
+                      }
+                    });
+                } catch(err) {
+                  if (window.SariSrtBridge) {
+                    window.SariSrtBridge.onError('exception: ' + err);
+                  }
+                }
               };
             })();
         """.trimIndent()
@@ -225,9 +261,13 @@ class SubWhisperInternalActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (resultDelivered || isFinishing) return@runOnUiThread
                     resultDelivered = true
-                    setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_SRT_TEXT, text))
+                    val resultIntent = Intent().putExtra(EXTRA_SRT_TEXT, text)
+                    setResult(Activity.RESULT_OK, resultIntent)
                     Toast.makeText(this@SubWhisperInternalActivity, "تم التقاط SRT وإرجاعه إلى Sari Subtitle", Toast.LENGTH_SHORT).show()
-                    finish()
+                    // تأخير finish حتى يُستدعى onActivityResult
+                    webView.postDelayed({
+                        if (!isFinishing) finish()
+                    }, 300)
                 }
             } catch (e: Exception) {
                 runOnUiThread { Toast.makeText(this@SubWhisperInternalActivity, "تعذّر قراءة ملف SRT: ${e.message}", Toast.LENGTH_LONG).show() }
