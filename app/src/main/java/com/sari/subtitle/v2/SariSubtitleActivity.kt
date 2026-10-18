@@ -166,6 +166,10 @@ class SariSubtitleActivity : AppCompatActivity() {
             testCaptureStream()
         }
 
+        findViewById<Button>(R.id.recordButton).setOnClickListener {
+            startAudioRecording()
+        }
+
         // اختبار captureStream
         findViewById<Button>(R.id.checkTimeButton).setOnLongClickListener {
             testCaptureStream()

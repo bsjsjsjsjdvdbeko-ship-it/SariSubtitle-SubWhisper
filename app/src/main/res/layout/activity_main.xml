@@ -99,6 +99,13 @@
             android:textSize="10sp" />
 
         <Button
+            android:id="@+id/recordButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="تسجيل"
+            android:textSize="10sp" />
+
+        <Button
             android:id="@+id/loadSrtButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
