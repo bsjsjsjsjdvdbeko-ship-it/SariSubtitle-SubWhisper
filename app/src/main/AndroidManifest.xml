@@ -20,6 +20,7 @@
         <activity
             android:name=".SariSubtitleActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true"
             android:screenOrientation="portrait">
             <intent-filter>
