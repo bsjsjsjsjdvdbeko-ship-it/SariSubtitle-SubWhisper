@@ -161,6 +161,12 @@ class SariSubtitleActivity : AppCompatActivity() {
             pollCurrentTimeOnce()
         }
 
+        // اختبار captureStream
+        findViewById<Button>(R.id.checkTimeButton).setOnLongClickListener {
+            testCaptureStream()
+            true
+        }
+
         findViewById<Button>(R.id.toggleOverlayButton).setOnClickListener {
             toggleOverlay()
         }
@@ -540,7 +546,53 @@ class SariSubtitleActivity : AppCompatActivity() {
     // Groq Whisper — تفريغ صوت
     // ═══════════════════════════════════════════════════════════
 
-    private fun openAudioPicker() {
+        private fun testCaptureStream() {
+        val js = """
+            (function() {
+              try {
+                var v = document.querySelector('video');
+                if (!v) return JSON.stringify({error: "no_video_found"});
+                var r = {
+                  captureStream: typeof v.captureStream,
+                  MediaRecorder: typeof MediaRecorder,
+                  currentTime: v.currentTime,
+                  duration: v.duration,
+                  paused: v.paused,
+                  src: v.currentSrc ? v.currentSrc.substring(0, 50) : "none",
+                  hasAudioTracks: false,
+                  audioTrackCount: 0
+                };
+                try {
+                  var s = v.captureStream();
+                  if (s) {
+                    var tracks = s.getAudioTracks();
+                    r.audioTrackCount = tracks.length;
+                    r.hasAudioTracks = tracks.length > 0;
+                  }
+                } catch(e) {
+                  r.captureError = String(e);
+                }
+                return JSON.stringify(r);
+              } catch(e) {
+                return JSON.stringify({error: String(e)});
+              }
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(js) { raw ->
+            val decoded = try {
+                org.json.JSONTokener(raw ?: "null").nextValue().toString()
+            } catch (_: Exception) { raw ?: "null" }
+            runOnUiThread {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("فحص captureStream")
+                    .setMessage(decoded)
+                    .setPositiveButton("حسناً", null)
+                    .show()
+            }
+        }
+    }
+
+private fun openAudioPicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "audio/*"
