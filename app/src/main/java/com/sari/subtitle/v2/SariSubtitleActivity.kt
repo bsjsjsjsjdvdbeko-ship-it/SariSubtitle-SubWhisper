@@ -37,6 +37,7 @@ class SariSubtitleActivity : AppCompatActivity() {
     companion object {
         private const val REQ_PICK_AUDIO = 1004
         private const val REQ_SAVE_WHISPER_SRT = 1005
+        private const val REQ_SUBWHISPER_INTERNAL = 1006
         private const val REQ_PICK_SRT = 1001
         private const val REQ_PICK_SRT_TO_TRANSLATE = 1002
         private const val REQ_TRANSLATE_SRT_PICK = 1002
@@ -118,6 +119,25 @@ class SariSubtitleActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.transcribeAudioButton).setOnClickListener {
             openAudioPicker()
+        }
+
+        findViewById<Button>(R.id.pasteLinkTranscribeButton).setOnClickListener {
+            openPasteLinkFlow()
+        }
+
+        // نسخ الرابط فقط داخل Sari Subtitle؛ لا يفتح SubWhisper أو أي تطبيق خارجي.
+        findViewById<Button>(R.id.copyLinkOnlyButton).setOnClickListener {
+            val link = urlInput.text.toString().trim()
+                .ifBlank { webView.url.orEmpty().trim() }
+            val uri = try { Uri.parse(link) } catch (_: Exception) { null }
+            if (link.isBlank() || uri == null || uri.scheme !in listOf("http", "https") || uri.host.isNullOrBlank()) {
+                Toast.makeText(this, "أدخل رابط فيديو صحيحاً أولاً", Toast.LENGTH_SHORT).show()
+            } else {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Video URL", link))
+                Toast.makeText(this, "تم نسخ الرابط فقط — لم يتم فتح أي تطبيق خارجي", Toast.LENGTH_SHORT).show()
+                statusText.text = "تم نسخ الرابط إلى الحافظة. لم يتم فتح خدمة خارجية."
+            }
         }
 
         findViewById<Button>(R.id.translateSrtButton).setOnClickListener {
@@ -264,7 +284,7 @@ class SariSubtitleActivity : AppCompatActivity() {
                 .setTitle("إنشاء SRT عبر SubWhisper")
                 .setMessage("نُسخ رابط الفيديو. سيفتح الموقع الخارجي؛ الصق الرابط هناك، واختر اللغة المستهدفة، ثم نزّل SRT وارجع إلى التطبيق لاستيراده. قد لا تدعم الخدمة بعض الروابط أو قد تفرض حدوداً مجانية. هذا المسار خارجي وليس محركاً مدمجاً.")
                 .setNegativeButton("إلغاء", null)
-                .setPositiveButton("فتح SubWhisper") { _, _ ->
+                .setPositiveButton("متابعة داخل التطبيق") { _, _ ->
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://sub.kuandre.com/")))
                     } catch (e: Exception) {
@@ -275,6 +295,65 @@ class SariSubtitleActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Toast.makeText(this, "تعذّر تجهيز الرابط: ${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    /**
+     * مسار سريع للرابط: يقبل لصق الرابط في حوار مستقل، ثم ينسخه ويفتح SubWhisper.
+     * لا ندّعي استخراج الصوت تلقائياً داخل التطبيق؛ الروابط الاجتماعية تحتاج عادةً
+     * إلى خدمة استخراج خارجية، وقد تتطلب تسجيل الدخول أو لا تكون مدعومة.
+     */
+    private fun openPasteLinkFlow() {
+        val clipboardText = try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            if (clipboard.hasPrimaryClip() && (clipboard.primaryClip?.itemCount ?: 0) > 0) {
+                clipboard.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()?.trim().orEmpty()
+            } else ""
+        } catch (_: Exception) { "" }
+        val clipboardUrl = Regex("https?://[^\\s<>\"']+", RegexOption.IGNORE_CASE)
+            .find(clipboardText)?.value?.trimEnd('.', ',', ')', ']', '}', '،').orEmpty()
+
+        val linkInput = EditText(this).apply {
+            hint = "الصق رابط الفيديو هنا"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            val existingUrl = urlInput.text.toString().trim().takeUnless { it == "https://x.com/" }.orEmpty()
+            setText(clipboardUrl.ifBlank { existingUrl })
+            setSelection(text.length)
+        }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 12, 40, 0)
+            addView(linkInput, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+            addView(TextView(this@SariSubtitleActivity).apply {
+                text = "سيُفتح موقع SubWhisper داخل Sari Subtitle دون الانتقال إلى تطبيق آخر. راجع الرابط واضغط إنشاء الترجمة في الصفحة؛ عند تنزيل SRT من الصفحة سيحاول التطبيق استيراده تلقائياً. قد لا تعمل الروابط المحمية أو غير المدعومة."
+                setPadding(0, 12, 0, 0)
+            })
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("الصق الرابط فقط")
+            .setView(container)
+            .setNegativeButton("إلغاء", null)
+            .setPositiveButton("متابعة داخل التطبيق") { _, _ ->
+                val link = linkInput.text.toString().trim()
+                val uri = try { Uri.parse(link) } catch (_: Exception) { null }
+                if (link.isBlank() || uri == null || uri.scheme !in listOf("http", "https") || uri.host.isNullOrBlank()) {
+                    Toast.makeText(this, "ألصق رابط فيديو صحيحاً يبدأ بـ http أو https", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                try {
+                    urlInput.setText(link)
+                    statusText.text = "تم فتح SubWhisper داخل Sari Subtitle. ألصق/راجع الرابط واضغط إنشاء الترجمة داخل الصفحة."
+                    val internalIntent = Intent(this, SubWhisperInternalActivity::class.java)
+                        .putExtra(SubWhisperInternalActivity.EXTRA_INITIAL_URL, link)
+                    startActivityForResult(internalIntent, REQ_SUBWHISPER_INTERNAL)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "تعذّر فتح نافذة التفريغ الداخلية: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+            .show()
     }
 
     private data class LanguageOption(val code: String, val label: String) {
@@ -584,6 +663,33 @@ class SariSubtitleActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode != Activity.RESULT_OK) return
+        if (requestCode == REQ_SUBWHISPER_INTERNAL) {
+            val srtText = data?.getStringExtra(SubWhisperInternalActivity.EXTRA_SRT_TEXT)
+            if (srtText.isNullOrBlank()) {
+                Toast.makeText(this, "لم يصل ملف SRT من صفحة SubWhisper", Toast.LENGTH_LONG).show()
+                return
+            }
+            try {
+                val cues = SrtParser.parse(srtText.byteInputStream())
+                if (cues.isEmpty()) {
+                    Toast.makeText(this, "الملف المستلم لا يحتوي على مقاطع SRT صالحة", Toast.LENGTH_LONG).show()
+                    return
+                }
+                repo.setCues(cues)
+                lastSrtText = srtText
+                val currentUrl = urlInput.text.toString().trim()
+                if (currentUrl.startsWith("http")) {
+                    storage.save(currentUrl, srtText, cues.size)
+                    lastSrtUrl = currentUrl
+                }
+                overlayOn = true
+                statusText.text = "تم استيراد SRT من SubWhisper داخل التطبيق: ${cues.size} مقطع"
+                Toast.makeText(this, "تم استيراد ${cues.size} مقطع SRT", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "تعذّر قراءة SRT: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
         val uri = data?.data ?: return
         when (requestCode) {
             REQ_PICK_SRT -> loadSrtFromUri(uri)

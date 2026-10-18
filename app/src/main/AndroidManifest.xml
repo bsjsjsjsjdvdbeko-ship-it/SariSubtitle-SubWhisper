@@ -13,6 +13,11 @@
         android:theme="@style/Theme.SariSubtitle">
 
         <activity
+            android:name=".SubWhisperInternalActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".SariSubtitleActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true"
