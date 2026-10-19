@@ -981,28 +981,37 @@ class SariSubtitleActivity : AppCompatActivity() {
     // ═══════════════════════════════════════════════════════════
     
     private fun transcribeCurrentWebVideo() {
-        Toast.makeText(this, "🔍 جارٍ فحص فيديو الصفحة الحالية…", Toast.LENGTH_SHORT).show()
-        statusText.text = "🔍 فحص فيديو الصفحة الحالية…"
+        Toast.makeText(this, "🔍 فحص الفيديو…", Toast.LENGTH_SHORT).show()
+        statusText.text = "🔍 فحص الفيديو…"
+        statusText.visibility = android.view.View.VISIBLE
         
         val js = """
             (function() {
               try {
+                var v = document.querySelector('video');
+                if (!v) return JSON.stringify({error: "no_video"});
+                
+                // اختر الفيديو الأكبر أو الأكثر تشغيلاً
                 var all = Array.from(document.querySelectorAll('video'));
-                if (!all.length) return JSON.stringify({error: "no_video"});
-                // Prefer a playing video, then the largest video element.
                 all.sort(function(a,b) {
                   var ap = !a.paused && !a.ended ? 1 : 0;
                   var bp = !b.paused && !b.ended ? 1 : 0;
                   if (ap !== bp) return bp - ap;
-                  return ((b.videoWidth||b.clientWidth)*(b.videoHeight||b.clientHeight)) - ((a.videoWidth||a.clientWidth)*(a.videoHeight||a.clientHeight));
+                  return ((b.videoWidth||0)*(b.videoHeight||0)) - ((a.videoWidth||0)*(a.videoHeight||0));
                 });
-                var v = all[0];
+                v = all[0];
                 window.__sariSelectedVideo = v;
+                
+                // 🔴 إلغاء الكتم — مهم
+                v.muted = false;
+                v.volume = 1.0;
+                
                 return JSON.stringify({
                   hasVideo: true,
-                  videoCount: all.length,
-                  duration: v.duration || 0,
                   paused: v.paused,
+                  muted: v.muted,
+                  volume: v.volume,
+                  duration: v.duration || 0,
                   canCapture: typeof v.captureStream === 'function',
                   canRecord: typeof MediaRecorder !== 'undefined'
                 });
@@ -1020,24 +1029,23 @@ class SariSubtitleActivity : AppCompatActivity() {
                 try {
                     val obj = org.json.JSONObject(decoded)
                     if (obj.has("error")) {
-                        Toast.makeText(this, "❌ لا يوجد فيديو", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, "❌ ${obj.getString("error")}", Toast.LENGTH_LONG).show()
                         return@runOnUiThread
                     }
                     val canCapture = obj.optBoolean("canCapture", false)
                     val canRecord = obj.optBoolean("canRecord", false)
                     val duration = obj.optDouble("duration", 0.0)
+                    
                     if (!canCapture || !canRecord) {
-                        android.app.AlertDialog.Builder(this)
-                            .setTitle("التقاط الصوت غير متاح")
-                            .setMessage("هذه الصفحة لا تتيح التقاط صوت الفيديو عبر WebView. جرّب تشغيل الفيديو داخل الصفحة، أو استخدم رابط وسائط مباشر/ملفاً محلياً. بعض المنصات تمنع التقاط الصوت أو تستخدم DRM.")
-                            .setPositiveButton("حسناً", null)
-                            .show()
+                        Toast.makeText(this, "❌ captureStream أو MediaRecorder غير متاح", Toast.LENGTH_LONG).show()
                         return@runOnUiThread
                     }
-                    // هذا المسار تجريبي ويقيد التسجيل إلى دقيقتين لتقليل الذاكرة والرفع.
+                    
                     if (duration > 120.0) {
-                        Toast.makeText(this, "سيتم التقاط أول دقيقتين فقط في هذا المسار التجريبي. للفيديو الكامل استخدم ملف صوت/فيديو محلياً.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, "سيتم التقاط أول دقيقتين فقط", Toast.LENGTH_LONG).show()
                     }
+                    
+                    // ابدأ التسجيل
                     startCurrentWebVideoRecording(duration)
                 } catch (e: Exception) {
                     Toast.makeText(this, "خطأ: ${e.message}", Toast.LENGTH_LONG).show()
@@ -1047,9 +1055,9 @@ class SariSubtitleActivity : AppCompatActivity() {
     }
     
     private fun startCurrentWebVideoRecording(duration: Double) {
-        val recordDurationMs = (minOf(duration * 1000.0, 120000.0)).toInt()  // 2 دقيقة كحد أقصى
+        val recordDurationMs = (minOf(duration * 1000.0, 120000.0)).toInt()
         val progress = android.app.ProgressDialog(this).apply {
-            setTitle("🎙️ تسجيل صوت الفيديو الحالي")
+            setTitle("🎙️ تسجيل صوت الفيديو")
             setMessage("جارٍ التسجيل…")
             setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER)
             setCancelable(false)
@@ -1061,8 +1069,7 @@ class SariSubtitleActivity : AppCompatActivity() {
         val timer = object : Runnable {
             override fun run() {
                 val elapsed = (System.currentTimeMillis() - startTime) / 1000
-                val remaining = (recordDurationMs / 1000) - elapsed
-                progress.setMessage("🎙️ جارٍ التسجيل…\nمضى: ${elapsed}s\nالمتبقي: ${remaining}s")
+                progress.setMessage("🎙️ جارٍ التسجيل…\nمضى: ${elapsed}s")
                 handler.postDelayed(this, 1000)
             }
         }
@@ -1073,12 +1080,25 @@ class SariSubtitleActivity : AppCompatActivity() {
               try {
                 var v = window.__sariSelectedVideo || document.querySelector('video');
                 if (!v) return JSON.stringify({error: "no_video"});
-                if (v.paused) await v.play();
-                await new Promise(r => setTimeout(r, 500));
                 
+                // 🔴 إلغاء الكتم — مهم
+                v.muted = false;
+                v.volume = 1.0;
+                
+                // تشغيل الفيديو
+                if (v.paused) await v.play();
+                // انتظر حتى يصبح readyState >= 3
+                var waited = 0;
+                while (v.readyState < 3 && waited < 5000) {
+                  await new Promise(r => setTimeout(r, 200));
+                  waited += 200;
+                }
+                if (v.readyState < 3) return JSON.stringify({error: "video_not_ready"});
+                
+                // الحصول على stream
                 var stream = v.captureStream();
                 var audioTracks = stream.getAudioTracks();
-                if (audioTracks.length === 0) return JSON.stringify({error: "no_audio"});
+                if (audioTracks.length === 0) return JSON.stringify({error: "no_audio_tracks"});
                 
                 var audioStream = new MediaStream(audioTracks);
                 var recorder = new MediaRecorder(audioStream, {
@@ -1092,6 +1112,10 @@ class SariSubtitleActivity : AppCompatActivity() {
                 return new Promise((resolve) => {
                   recorder.onstop = async () => {
                     var blob = new Blob(chunks, { type: 'audio/webm' });
+                    if (blob.size === 0) {
+                      resolve(JSON.stringify({error: "empty_recording"}));
+                      return;
+                    }
                     var reader = new FileReader();
                     reader.onload = () => resolve(JSON.stringify({
                       audio: reader.result.split(',')[1],
@@ -1100,7 +1124,9 @@ class SariSubtitleActivity : AppCompatActivity() {
                     reader.readAsDataURL(blob);
                   };
                   recorder.start();
-                  setTimeout(() => recorder.stop(), ${recordDurationMs});
+                  setTimeout(() => {
+                    if (recorder.state !== 'inactive') recorder.stop();
+                  }, ${recordDurationMs});
                 });
               } catch(e) {
                 return JSON.stringify({error: String(e)});
@@ -1120,12 +1146,22 @@ class SariSubtitleActivity : AppCompatActivity() {
                 try {
                     val obj = org.json.JSONObject(decoded)
                     if (obj.has("error")) {
-                        Toast.makeText(this, "❌ ${obj.getString("error")}", Toast.LENGTH_LONG).show()
+                        val err = obj.getString("error")
+                        Toast.makeText(this, "❌ فشل التسجيل: $err", Toast.LENGTH_LONG).show()
+                        statusText.text = "❌ فشل التسجيل: $err"
+                        return@runOnUiThread
+                    }
+                    if (!obj.has("audio")) {
+                        Toast.makeText(this, "❌ لم يُرجع الصوت", Toast.LENGTH_LONG).show()
                         return@runOnUiThread
                     }
                     val b64 = obj.getString("audio")
                     val sizeKB = obj.optInt("size", 0) / 1024
-                    statusText.text = "✅ تم تسجيل $sizeKB KB — جارٍ إرسال إلى ${settings.sttProviderLabel}…"
+                    if (sizeKB < 10) {
+                        Toast.makeText(this, "❌ التسجيل صغير جداً ($sizeKB KB)", Toast.LENGTH_LONG).show()
+                        return@runOnUiThread
+                    }
+                    statusText.text = "✅ تسجيل $sizeKB KB — إرسال إلى Groq…"
                     val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
                     sendToGroq(bytes)
                 } catch (e: Exception) {
