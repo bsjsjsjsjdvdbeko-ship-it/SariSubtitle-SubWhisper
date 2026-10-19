@@ -92,10 +92,10 @@ class SariSubtitleActivity : AppCompatActivity() {
             mediaPlaybackRequiresUserGesture = false
             loadWithOverviewMode = true
             useWideViewPort = true
-            cacheMode = WebSettings.LOAD_DEFAULT
-            userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+            cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+            userAgentString = "Mozilla/5.0 (Linux; Android 13; SM-G991B) " +
                 "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                "Chrome/120.0.0.0 Safari/537.36"
+                "Chrome/120.0.0.0 Mobile Safari/537.36"
         }
         WebView.setWebContentsDebuggingEnabled(true)
 
@@ -1583,7 +1583,7 @@ private fun openAudioPicker() {
             override fun run() {
                 if (!polling) return
                 pollCurrentTimeOnce()
-                handler.postDelayed(this, 250L)
+                handler.postDelayed(this, 500L)
             }
         })
     }

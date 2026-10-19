@@ -6,6 +6,7 @@
         android:maxSdkVersion="32" />
 
     <application
+        android:hardwareAccelerated="true"
         android:allowBackup="true"
         android:label="Sari Subtitle"
         android:supportsRtl="true"
