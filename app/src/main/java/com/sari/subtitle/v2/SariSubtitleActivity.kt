@@ -1113,7 +1113,15 @@ class SariSubtitleActivity : AppCompatActivity() {
                   recorder.onstop = async () => {
                     var blob = new Blob(chunks, { type: 'audio/webm' });
                     if (blob.size === 0) {
-                      resolve(JSON.stringify({error: "empty_recording"}));
+                      resolve(JSON.stringify({
+                        error: "empty_recording",
+                        paused: v.paused,
+                        muted: v.muted,
+                        volume: v.volume,
+                        readyState: v.readyState,
+                        audioTracks: audioStream.getAudioTracks().length,
+                        chunksCount: chunks.length
+                      }));
                       return;
                     }
                     var reader = new FileReader();
