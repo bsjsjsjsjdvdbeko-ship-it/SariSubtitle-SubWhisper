@@ -1418,6 +1418,11 @@ private data class SelectedTranscriptionResult(val language: String, val text: S
             openChromeForDownload()
         }
 
+        view.findViewById<Button>(R.id.bsOneTapArabicButton)?.setOnClickListener {
+            sheet.dismiss()
+            oneTapArabic()
+        }
+
         view.findViewById<Button>(R.id.bsGenerateSrtButton)?.setOnClickListener {
             sheet.dismiss()
             findViewById<Button>(R.id.generateSrtFromLinkButton)?.performClick()
@@ -1578,6 +1583,42 @@ private data class SelectedTranscriptionResult(val language: String, val text: S
                 Toast.makeText(this, "❌ لا يوجد متصفح: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    private fun oneTapArabic() {
+        val link = urlInput.text.toString().trim().ifBlank { webView.url.orEmpty().trim() }
+        if (link.isNotEmpty() && link.startsWith("http")) {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Video URL", link))
+        }
+        
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🎬 ترجمة فيديو X للعربية")
+            .setMessage(
+                "الخطوة 1: سيفتح Chrome لتنزيل الصوت.\n" +
+                "الخطوة 2: الصق الرابط → Download MP3.\n" +
+                "الخطوة 3: ارجع للتطبيق واختر الملف.\n\n" +
+                "التطبيق سيكمل تلقائياً:\n" +
+                "• تفريغ الصوت (Groq/Deepgram).\n" +
+                "• ترجمة للعربية (DeepL + Google).\n" +
+                "• عرض الترجمة على الفيديو."
+            )
+            .setNegativeButton("إلغاء", null)
+            .setPositiveButton("فتح Chrome") { _, _ ->
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://ssstwitter.com/"))
+                    intent.setPackage("com.android.chrome")
+                    startActivity(intent)
+                    Toast.makeText(this, "⬇️ حمّل MP3، ثم عُد للتطبيق", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://ssstwitter.com/")))
+                    } catch (e2: Exception) {
+                        Toast.makeText(this, "❌ لا يوجد متصفح", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .show()
     }
 
 private fun openAudioPicker() {

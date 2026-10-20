@@ -26,6 +26,13 @@
             android:text="📥 فتح Chrome لتنزيل الصوت من X" />
 
         <Button
+            android:id="@+id/bsOneTapArabicButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🎬 فيديو X → SRT عربي (زر واحد)"
+            android:textStyle="bold" />
+
+        <Button
             android:id="@+id/bsGenerateSrtButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
