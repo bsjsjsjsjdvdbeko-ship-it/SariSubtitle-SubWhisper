@@ -32,6 +32,12 @@
             android:text="🎙️ تفريغ صوت الفيديو الحالي" />
 
         <Button
+            android:id="@+id/bsOpenDownloaderButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📥 فتح موقع تنزيل X (ssstwitter)" />
+
+        <Button
             android:id="@+id/bsTranscribeAudioButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

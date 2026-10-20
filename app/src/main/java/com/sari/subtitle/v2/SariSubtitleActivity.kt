@@ -1289,6 +1289,17 @@ private data class SelectedTranscriptionResult(val language: String, val text: S
             findViewById<Button>(R.id.transcribeXAutoButton)?.performClick()
         }
 
+        view.findViewById<Button>(R.id.bsOpenDownloaderButton)?.setOnClickListener {
+            sheet.dismiss()
+            val link = urlInput.text.toString().trim()
+            if (link.isNotEmpty() && link.startsWith("http")) {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Video URL", link))
+                Toast.makeText(this, "تم نسخ الرابط — الصقه في الموقع", Toast.LENGTH_LONG).show()
+            }
+            webView.loadUrl("https://ssstwitter.com/")
+        }
+
         view.findViewById<Button>(R.id.bsTranscribeAudioButton)?.setOnClickListener {
             sheet.dismiss()
             findViewById<Button>(R.id.transcribeAudioButton)?.performClick()
