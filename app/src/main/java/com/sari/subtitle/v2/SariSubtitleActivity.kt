@@ -1272,7 +1272,19 @@ class SariSubtitleActivity : AppCompatActivity() {
                         repo.setCues(cues)
                         overlayOn = true
                         statusText.text = "✅ SRT جاهز: ${cues.size} مقطع"
-                        Toast.makeText(this, "✅ تم التفريغ: ${cues.size} مقطع SRT", Toast.LENGTH_LONG).show()
+                        statusText.visibility = android.view.View.VISIBLE
+                        
+                        // 🎯 إعادة تحميل الفيديو لبدء المزامنة
+                        val currentUrl = webView.url ?: urlInput.text.toString().trim()
+                        if (currentUrl.startsWith("http")) {
+                            statusText.text = "✅ ${cues.size} مقطع — جارٍ إعادة تحميل الفيديو للمزامنة…"
+                            // إعادة تحميل بعد تأخير بسيط
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                webView.loadUrl(currentUrl)
+                            }, 500)
+                        }
+                        
+                        Toast.makeText(this, "✅ تم التفريغ: ${cues.size} مقطع SRT — الفيديو سيُعاد تحميله", Toast.LENGTH_LONG).show()
                     } catch (e: Exception) {
                         Toast.makeText(this, "خطأ في SRT: ${e.message}", Toast.LENGTH_LONG).show()
                     }
