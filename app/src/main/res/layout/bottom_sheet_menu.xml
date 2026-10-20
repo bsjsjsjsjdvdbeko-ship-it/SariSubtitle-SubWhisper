@@ -20,6 +20,12 @@
             android:padding="8dp" />
 
         <Button
+            android:id="@+id/bsOpenChromeDownloaderButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📥 فتح Chrome لتنزيل الصوت من X" />
+
+        <Button
             android:id="@+id/bsGenerateSrtButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

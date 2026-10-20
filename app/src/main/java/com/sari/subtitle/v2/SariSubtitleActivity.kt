@@ -1318,6 +1318,11 @@ private data class SelectedTranscriptionResult(val language: String, val text: S
         sheet.setContentView(view)
 
         // ربط كل زر داخل Bottom Sheet
+        view.findViewById<Button>(R.id.bsOpenChromeDownloaderButton)?.setOnClickListener {
+            sheet.dismiss()
+            openChromeForDownload()
+        }
+
         view.findViewById<Button>(R.id.bsGenerateSrtButton)?.setOnClickListener {
             sheet.dismiss()
             findViewById<Button>(R.id.generateSrtFromLinkButton)?.performClick()
@@ -1449,6 +1454,33 @@ private data class SelectedTranscriptionResult(val language: String, val text: S
                 } catch (e: Exception) {
                     Toast.makeText(this, "❌ ${e.message}", Toast.LENGTH_LONG).show()
                 }
+            }
+        }
+    }
+
+    private fun openChromeForDownload() {
+        // 1) انسخ رابط X الحالي
+        val link = urlInput.text.toString().trim().ifBlank { webView.url.orEmpty().trim() }
+        if (link.isNotEmpty() && link.startsWith("http")) {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Video URL", link))
+            Toast.makeText(this, "✅ تم نسخ الرابط — سيُفتح Chrome", Toast.LENGTH_LONG).show()
+        }
+        
+        // 2) افتح Chrome مع ssstwitter
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://ssstwitter.com/"))
+            // حدد Chrome تحديداً
+            intent.setPackage("com.android.chrome")
+            startActivity(intent)
+            Toast.makeText(this, "الصق الرابط في Chrome → حمّل MP3 → عُد للتطبيق", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            // إذا Chrome غير مثبت — استخدم أي متصفح
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://ssstwitter.com/")))
+                Toast.makeText(this, "الصق الرابط → حمّل MP3 → عُد", Toast.LENGTH_LONG).show()
+            } catch (e2: Exception) {
+                Toast.makeText(this, "❌ لا يوجد متصفح: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
