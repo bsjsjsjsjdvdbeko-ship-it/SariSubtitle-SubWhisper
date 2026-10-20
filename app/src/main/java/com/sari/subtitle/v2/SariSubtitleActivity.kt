@@ -1498,11 +1498,19 @@ private fun openAudioPicker() {
     }
 
     private fun transcribeAudioFile(uri: Uri) {
-        val labels = arrayOf("العربية (ar)", "الإنجليزية (en)")
+        val labels = arrayOf(
+            "اكتشاف تلقائي (موصى به)",
+            "العربية (ar)",
+            "الإنجليزية (en)"
+        )
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("لغة الصوت")
             .setItems(labels) { _, selected ->
-                val lang = if (selected == 0) "ar" else "en"
+                val lang = when (selected) {
+                    1 -> "ar"
+                    2 -> "en"
+                    else -> "auto"
+                }
                 runGroqTranscription(uri, lang)
             }
             .setNegativeButton("إلغاء", null)
