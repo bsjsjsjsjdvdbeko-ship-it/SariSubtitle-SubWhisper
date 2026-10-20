@@ -12,6 +12,10 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.webkit.WebChromeClient
+import android.app.DownloadManager
+import android.os.Environment
+import android.webkit.CookieManager
+import android.webkit.URLUtil
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -108,6 +112,41 @@ class SariSubtitleActivity : AppCompatActivity() {
             }
         }
         webView.webChromeClient = WebChromeClient()
+        
+        // ═══════════════════════════════════════════════════════════
+        // تحميل الملفات من WebView
+        // ═══════════════════════════════════════════════════════════
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
+            try {
+                android.util.Log.d("SariDownload", "Download request: $url (mime=$mimeType, length=$contentLength)")
+                
+                // إذا كان blob: → نحتاج JS لتحويله إلى base64
+                if (url.startsWith("blob:") || url.startsWith("data:")) {
+                    downloadBlobViaJs(url, mimeType)
+                    return@setDownloadListener
+                }
+                
+                val request = DownloadManager.Request(android.net.Uri.parse(url))
+                val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
+                    .replace(Regex("[^A-Za-z0-9._-]"), "_")
+                request.setMimeType(mimeType)
+                request.addRequestHeader("User-Agent", userAgent)
+                request.addRequestHeader("Cookie", CookieManager.getInstance().getCookie(url) ?: "")
+                request.setTitle(fileName)
+                request.setDescription("تحميل من التطبيق")
+                request.allowScanningByMediaScanner()
+                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                
+                val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+                val id = dm.enqueue(request)
+                Toast.makeText(this, "⬇️ بدأ التنزيل: $fileName", Toast.LENGTH_LONG).show()
+                statusText.text = "⬇️ تنزيل: $fileName"
+                statusText.visibility = android.view.View.VISIBLE
+            } catch (e: Exception) {
+                Toast.makeText(this, "❌ فشل التنزيل: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
 
         findViewById<Button>(R.id.loadButton).setOnClickListener {
             val url = urlInput.text.toString().trim()
@@ -1357,6 +1396,61 @@ private data class SelectedTranscriptionResult(val language: String, val text: S
         statusText.text = text
         statusText.visibility = android.view.View.VISIBLE
         // إخفاء تلقائي بعد 3 ثوان (اختياري)
+    }
+
+    private fun downloadBlobViaJs(blobUrl: String, mimeType: String) {
+        Toast.makeText(this, "⬇️ تحميل blob…", Toast.LENGTH_SHORT).show()
+        val js = """
+            (async function() {
+              try {
+                var response = await fetch('$blobUrl');
+                var blob = await response.blob();
+                var reader = new FileReader();
+                return new Promise((resolve) => {
+                  reader.onload = () => resolve(JSON.stringify({
+                    data: reader.result.split(',')[1],
+                    type: blob.type || '$mimeType'
+                  }));
+                  reader.readAsDataURL(blob);
+                });
+              } catch(e) {
+                return JSON.stringify({error: String(e)});
+              }
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(js) { raw ->
+            val decoded = try {
+                org.json.JSONTokener(raw ?: "null").nextValue().toString()
+            } catch (_: Exception) { raw ?: "null" }
+            runOnUiThread {
+                try {
+                    val obj = org.json.JSONObject(decoded)
+                    if (obj.has("error")) {
+                        Toast.makeText(this, "❌ ${obj.getString("error")}", Toast.LENGTH_LONG).show()
+                        return@runOnUiThread
+                    }
+                    val b64 = obj.getString("data")
+                    val type = obj.optString("type", mimeType)
+                    val ext = when {
+                        type.contains("mp3") -> "mp3"
+                        type.contains("mp4") -> "mp4"
+                        type.contains("webm") -> "webm"
+                        type.contains("m4a") -> "m4a"
+                        else -> "bin"
+                    }
+                    val fileName = "sari_${System.currentTimeMillis()}.$ext"
+                    val file = java.io.File(Environment.getExternalStoragePublicDirectory(
+                        Environment.DIRECTORY_DOWNLOADS), fileName)
+                    val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                    file.writeBytes(bytes)
+                    Toast.makeText(this, "✅ حُفظ: $fileName (${bytes.size / 1024} KB)", Toast.LENGTH_LONG).show()
+                    statusText.text = "✅ $fileName — ${bytes.size / 1024} KB"
+                    statusText.visibility = android.view.View.VISIBLE
+                } catch (e: Exception) {
+                    Toast.makeText(this, "❌ ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
 private fun openAudioPicker() {
