@@ -988,30 +988,34 @@ class SariSubtitleActivity : AppCompatActivity() {
         val js = """
             (function() {
               try {
-                var v = document.querySelector('video');
-                if (!v) return JSON.stringify({error: "no_video"});
-                
-                // اختر الفيديو الأكبر أو الأكثر تشغيلاً
+                // اختيار الفيديو المرئي (وليس المخفي)
                 var all = Array.from(document.querySelectorAll('video'));
-                all.sort(function(a,b) {
-                  var ap = !a.paused && !a.ended ? 1 : 0;
-                  var bp = !b.paused && !b.ended ? 1 : 0;
-                  if (ap !== bp) return bp - ap;
-                  return ((b.videoWidth||0)*(b.videoHeight||0)) - ((a.videoWidth||0)*(a.videoHeight||0));
-                });
-                v = all[0];
-                window.__sariSelectedVideo = v;
+                if (!all.length) return JSON.stringify({error: "no_video"});
                 
-                // 🔴 إلغاء الكتم — مهم
-                v.muted = false;
-                v.volume = 1.0;
+                // الأكبر مساحة (المرئي)
+                var best = all[0];
+                var maxArea = 0;
+                for (var i = 0; i < all.length; i++) {
+                  var r = all[i].getBoundingClientRect();
+                  var area = r.width * r.height;
+                  if (area > maxArea) {
+                    maxArea = area;
+                    best = all[i];
+                  }
+                }
+                
+                var v = best;
+                window.__sariSelectedVideo = v;
                 
                 return JSON.stringify({
                   hasVideo: true,
+                  videoCount: all.length,
                   paused: v.paused,
                   muted: v.muted,
                   volume: v.volume,
                   duration: v.duration || 0,
+                  videoWidth: v.videoWidth,
+                  videoHeight: v.videoHeight,
                   canCapture: typeof v.captureStream === 'function',
                   canRecord: typeof MediaRecorder !== 'undefined'
                 });
@@ -1045,7 +1049,6 @@ class SariSubtitleActivity : AppCompatActivity() {
                         Toast.makeText(this, "سيتم التقاط أول دقيقتين فقط", Toast.LENGTH_LONG).show()
                     }
                     
-                    // ابدأ التسجيل
                     startCurrentWebVideoRecording(duration)
                 } catch (e: Exception) {
                     Toast.makeText(this, "خطأ: ${e.message}", Toast.LENGTH_LONG).show()
@@ -1057,7 +1060,7 @@ class SariSubtitleActivity : AppCompatActivity() {
     private fun startCurrentWebVideoRecording(duration: Double) {
         val recordDurationMs = (minOf(duration * 1000.0, 120000.0)).toInt()
         val progress = android.app.ProgressDialog(this).apply {
-            setTitle("🎙️ تسجيل صوت الفيديو")
+            setTitle("🎙️ تسجيل الصوت")
             setMessage("جارٍ التسجيل…")
             setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER)
             setCancelable(false)
@@ -1078,27 +1081,32 @@ class SariSubtitleActivity : AppCompatActivity() {
         val js = """
             (async function() {
               try {
-                var v = window.__sariSelectedVideo || document.querySelector('video');
-                if (!v) return JSON.stringify({error: "no_video"});
+                // 🔴 استخدم window.__sariSelectedVideo أولاً
+                var v = window.__sariSelectedVideo;
+                if (!v) {
+                  var all = document.querySelectorAll('video');
+                  if (!all.length) return JSON.stringify({error: "no_video"});
+                  v = all[0];
+                }
                 
-                // 🔴 إلغاء الكتم — مهم
+                // 🔴 إلغاء الكتم
                 v.muted = false;
                 v.volume = 1.0;
                 
-                // تشغيل الفيديو
-                if (v.paused) await v.play();
-                // انتظر حتى يصبح readyState >= 3
-                var waited = 0;
-                while (v.readyState < 3 && waited < 5000) {
-                  await new Promise(r => setTimeout(r, 200));
-                  waited += 200;
+                // 🔴 شغّل الفيديو
+                if (v.paused) {
+                  try { await v.play(); } catch(e) {}
                 }
-                if (v.readyState < 3) return JSON.stringify({error: "video_not_ready"});
                 
-                // الحصول على stream
+                // انتظر بسيط
+                await new Promise(r => setTimeout(r, 500));
+                
+                // 🔴 captureStream
                 var stream = v.captureStream();
                 var audioTracks = stream.getAudioTracks();
-                if (audioTracks.length === 0) return JSON.stringify({error: "no_audio_tracks"});
+                if (audioTracks.length === 0) {
+                  return JSON.stringify({error: "no_audio_tracks"});
+                }
                 
                 var audioStream = new MediaStream(audioTracks);
                 var recorder = new MediaRecorder(audioStream, {
@@ -1117,8 +1125,6 @@ class SariSubtitleActivity : AppCompatActivity() {
                         error: "empty_recording",
                         paused: v.paused,
                         muted: v.muted,
-                        volume: v.volume,
-                        readyState: v.readyState,
                         audioTracks: audioStream.getAudioTracks().length,
                         chunksCount: chunks.length
                       }));
@@ -1155,8 +1161,10 @@ class SariSubtitleActivity : AppCompatActivity() {
                     val obj = org.json.JSONObject(decoded)
                     if (obj.has("error")) {
                         val err = obj.getString("error")
-                        Toast.makeText(this, "❌ فشل التسجيل: $err", Toast.LENGTH_LONG).show()
-                        statusText.text = "❌ فشل التسجيل: $err"
+                        val details = if (obj.has("paused")) {
+                            "\n(muted=${obj.optBoolean("muted")}, audioTracks=${obj.optInt("audioTracks")}, chunks=${obj.optInt("chunksCount")})"
+                        } else ""
+                        Toast.makeText(this, "❌ $err$details", Toast.LENGTH_LONG).show()
                         return@runOnUiThread
                     }
                     if (!obj.has("audio")) {
@@ -1165,11 +1173,8 @@ class SariSubtitleActivity : AppCompatActivity() {
                     }
                     val b64 = obj.getString("audio")
                     val sizeKB = obj.optInt("size", 0) / 1024
-                    if (sizeKB < 10) {
-                        Toast.makeText(this, "❌ التسجيل صغير جداً ($sizeKB KB)", Toast.LENGTH_LONG).show()
-                        return@runOnUiThread
-                    }
-                    statusText.text = "✅ تسجيل $sizeKB KB — إرسال إلى Groq…"
+                    Toast.makeText(this, "✅ تسجيل $sizeKB KB", Toast.LENGTH_LONG).show()
+                    statusText.text = "✅ $sizeKB KB — إرسال إلى Groq…"
                     val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
                     sendToGroq(bytes)
                 } catch (e: Exception) {
