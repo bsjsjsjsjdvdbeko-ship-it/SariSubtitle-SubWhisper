@@ -135,6 +135,40 @@ object SettingsDialog {
             }
         })
 
+        root.addView(makeLabel(context, "مفتاح DeepL API (للترجمة)"))
+        val deepLStatus = TextView(context).apply {
+            text = if (settings.hasDeepLApiKey()) "الحالة: محفوظ ✓" else "الحالة: غير محفوظ ✗"
+            textSize = 13f
+            setTextColor(if (settings.hasDeepLApiKey()) Color.GREEN else Color.RED)
+        }
+        root.addView(deepLStatus)
+        val deepLApiKeyInput = android.widget.EditText(context).apply {
+            hint = "أدخل مفتاح DeepL (اختياري — جودة ترجمة 95%)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        root.addView(deepLApiKeyInput)
+        root.addView(TextView(context).apply {
+            text = "اتركه فارغاً للاحتفاظ. DeepL مجاني 500K حرف/شهر. للخطة المجانية، المفتاح ينتهي بـ :fx"
+            textSize = 11f
+            setTextColor(Color.GRAY)
+        })
+        root.addView(Button(context).apply {
+            text = "حذف مفتاح DeepL المحفوظ"
+            setOnClickListener {
+                AlertDialog.Builder(context)
+                    .setTitle("حذف المفتاح")
+                    .setMessage("هل تريد حذف مفتاح DeepL المحفوظ؟")
+                    .setNegativeButton("إلغاء", null)
+                    .setPositiveButton("حذف") { _, _ ->
+                        settings.clearDeepLApiKey()
+                        deepLStatus.text = "الحالة: غير محفوظ ✗"
+                        deepLStatus.setTextColor(Color.RED)
+                    }
+                    .show()
+            }
+        })
+
         root.addView(makeLabel(context, "مفتاح OpenAI API"))
         val openAiStatus = TextView(context).apply {
             text = if (settings.hasOpenAiApiKey()) "الحالة: محفوظ ✓" else "الحالة: غير محفوظ ✗"
@@ -325,6 +359,12 @@ object SettingsDialog {
                         settings.deepgramApiKey = newDeepgramKey
                         deepgramStatus.text = "الحالة: محفوظ ✓"
                         deepgramStatus.setTextColor(Color.GREEN)
+                    }
+                    val newDeepLKey = deepLApiKeyInput.text.toString().trim()
+                    if (newDeepLKey.isNotEmpty()) {
+                        settings.deepLApiKey = newDeepLKey
+                        deepLStatus.text = "الحالة: محفوظ ✓"
+                        deepLStatus.setTextColor(Color.GREEN)
                     }
                     val newOpenAiKey = openAiKeyInput.text.toString().trim()
                     if (newOpenAiKey.isNotEmpty()) {

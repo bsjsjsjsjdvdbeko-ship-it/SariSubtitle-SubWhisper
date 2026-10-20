@@ -1228,7 +1228,7 @@ class SariSubtitleActivity : AppCompatActivity() {
             Toast.makeText(this, "أدخل مفتاح ${settings.sttProviderLabel} من الإعدادات أولاً", Toast.LENGTH_LONG).show()
             return
         }
-        
+
         val progress = android.app.ProgressDialog(this).apply {
             setTitle("🌐 ${settings.sttProviderLabel}")
             setMessage("جارٍ التفريغ…")
@@ -1236,7 +1236,7 @@ class SariSubtitleActivity : AppCompatActivity() {
             setCancelable(false)
             show()
         }
-        
+
         val startTime = System.currentTimeMillis()
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
         val timer = object : Runnable {
@@ -1247,19 +1247,18 @@ class SariSubtitleActivity : AppCompatActivity() {
             }
         }
         handler.post(timer)
-        
+
         Thread {
             try {
                 val tempFile = java.io.File(cacheDir, "x_audio_${System.currentTimeMillis()}.webm")
                 tempFile.writeBytes(audioBytes)
-                
+
                 val result = try {
                     transcribeWithSelectedProvider(android.net.Uri.fromFile(tempFile), "auto")
                 } finally {
-                    // Always remove the temporary recording, including on API errors.
                     tempFile.delete()
                 }
-                
+
                 handler.removeCallbacks(timer)
                 runOnUiThread {
                     progress.dismiss()
@@ -1269,22 +1268,106 @@ class SariSubtitleActivity : AppCompatActivity() {
                             Toast.makeText(this, "لم يتم استخراج مقاطع", Toast.LENGTH_LONG).show()
                             return@runOnUiThread
                         }
-                        repo.setCues(cues)
-                        overlayOn = true
-                        statusText.text = "✅ SRT جاهز: ${cues.size} مقطع"
-                        statusText.visibility = android.view.View.VISIBLE
                         
-                        // 🎯 إعادة تحميل الفيديو لبدء المزامنة
-                        val currentUrl = webView.url ?: urlInput.text.toString().trim()
-                        if (currentUrl.startsWith("http")) {
-                            statusText.text = "✅ ${cues.size} مقطع — جارٍ إعادة تحميل الفيديو للمزامنة…"
-                            // إعادة تحميل بعد تأخير بسيط
-                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                webView.loadUrl(currentUrl)
-                            }, 500)
+                        // 🔵 الترجمة التلقائية للعربية
+                        val detectedLang = result.language.lowercase().take(2)
+                        val isArabic = detectedLang == "ar"
+                        val deepLKey = settings.deepLApiKey
+                        val useDeepL = deepLKey.isNotBlank()
+                        
+                        if (!isArabic && detectedLang.isNotBlank() && detectedLang != "au") {
+                            // ترجم
+                            val provider = if (useDeepL) "DeepL" else "MyMemory"
+                            val progress2 = android.app.ProgressDialog(this).apply {
+                                setTitle("🌐 ترجمة → العربية ($provider)")
+                                setMessage("جارٍ الترجمة…")
+                                setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
+                                setCancelable(false)
+                                max = 100
+                                show()
+                            }
+                            
+                            Thread {
+                                try {
+                                    val translatedSrt = if (useDeepL) {
+                                        DeepLTranslationService.translateSrt(
+                                            source = result.srt,
+                                            sourceLang = detectedLang,
+                                            targetLang = "ar",
+                                            apiKey = deepLKey
+                                        ) { done, total ->
+                                            runOnUiThread {
+                                                progress2.progress = (done * 100 / total)
+                                                progress2.setMessage("$provider: $done / $total")
+                                            }
+                                        }
+                                    } else {
+                                        SrtTranslationService.translateSrt(
+                                            source = result.srt,
+                                            sourceLang = detectedLang,
+                                            targetLang = "ar",
+                                            context = applicationContext
+                                        ) { done, total ->
+                                            runOnUiThread {
+                                                progress2.progress = (done * 100 / total)
+                                                progress2.setMessage("MyMemory: $done / $total")
+                                            }
+                                        }
+                                    }
+                                    
+                                    val translatedCues = SrtParser.parse(translatedSrt.byteInputStream())
+                                    runOnUiThread {
+                                        progress2.dismiss()
+                                        repo.setCues(translatedCues)
+                                        overlayOn = true
+                                        statusText.text = "✅ SRT عربي: ${translatedCues.size} مقطع"
+                                        statusText.visibility = android.view.View.VISIBLE
+                                        
+                                        // إعادة تحميل الفيديو
+                                        val currentUrl = webView.url ?: urlInput.text.toString().trim()
+                                        if (currentUrl.startsWith("http")) {
+                                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                                webView.loadUrl(currentUrl)
+                                            }, 500)
+                                        }
+                                        
+                                        Toast.makeText(this, "✅ ترجمة عربية: ${translatedCues.size} مقطع", Toast.LENGTH_LONG).show()
+                                    }
+                                } catch (e: Exception) {
+                                    runOnUiThread {
+                                        progress2.dismiss()
+                                        // فشل الترجمة — استخدم SRT الأصلي
+                                        repo.setCues(cues)
+                                        overlayOn = true
+                                        statusText.text = "⚠️ الترجمة فشلت (${e.message}) — SRT أصلي"
+                                        
+                                        Toast.makeText(this, "⚠️ الترجمة فشلت: ${e.message}", Toast.LENGTH_LONG).show()
+                                        
+                                        val currentUrl = webView.url ?: urlInput.text.toString().trim()
+                                        if (currentUrl.startsWith("http")) {
+                                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                                webView.loadUrl(currentUrl)
+                                            }, 500)
+                                        }
+                                    }
+                                }
+                            }.start()
+                        } else {
+                            // SRT عربي بالفعل
+                            repo.setCues(cues)
+                            overlayOn = true
+                            statusText.text = "✅ SRT عربي: ${cues.size} مقطع"
+                            statusText.visibility = android.view.View.VISIBLE
+                            
+                            val currentUrl = webView.url ?: urlInput.text.toString().trim()
+                            if (currentUrl.startsWith("http")) {
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                    webView.loadUrl(currentUrl)
+                                }, 500)
+                            }
+                            
+                            Toast.makeText(this, "✅ SRT عربي: ${cues.size} مقطع", Toast.LENGTH_LONG).show()
                         }
-                        
-                        Toast.makeText(this, "✅ تم التفريغ: ${cues.size} مقطع SRT — الفيديو سيُعاد تحميله", Toast.LENGTH_LONG).show()
                     } catch (e: Exception) {
                         Toast.makeText(this, "خطأ في SRT: ${e.message}", Toast.LENGTH_LONG).show()
                     }

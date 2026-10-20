@@ -92,6 +92,14 @@ class SubtitleSettings(context: Context) {
     fun clearOpenAiApiKey() = openAiKeyStore.clear()
     fun hasOpenAiApiKey(): Boolean = try { openAiKeyStore.read().isNotBlank() } catch (_: Exception) { false }
 
+    private val deepLKeyStore = DeepLApiKeyStore(context.applicationContext)
+    var deepLApiKey: String
+        get() = try { deepLKeyStore.read() } catch (_: Exception) { "" }
+        set(value) { if (value.isBlank()) deepLKeyStore.clear() else deepLKeyStore.save(value) }
+    fun clearDeepLApiKey() = deepLKeyStore.clear()
+    fun hasDeepLApiKey(): Boolean = try { deepLKeyStore.read().isNotBlank() } catch (_: Exception) { false }
+
+
     var sttProvider: String
         get() = prefs.getString(KEY_STT_PROVIDER, STT_GROQ) ?: STT_GROQ
         set(value) = prefs.edit().putString(KEY_STT_PROVIDER, when (value) {
